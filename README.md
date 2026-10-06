@@ -118,7 +118,7 @@ No GitHub Pages, score estático cobre fundos presentes no snapshot. Pondera DY,
 
 Simulação ocorre mês a mês. Cada período aplica aporte, valorização e dividendos. Dividendos entram novamente no patrimônio somente quando reinvestimento está ativo. Resultado mostra patrimônio, total aportado, dividendos, renda mensal estimada e pontos anuais.
 
-Simulação por FII usa DY calculado pelo total dos últimos 12 rendimentos dividido pelo preço atual. Valorização usa retorno anualizado do histórico disponível, limitado entre -20% e 20%. Simulação da carteira usa todos os ativos salvos. Posições com quantidade recebem peso pelo valor atual; posições sem quantidade recebem peso igual. A análise de expectativa apresenta cenários conservador, de referência e expansivo sobre essas premissas; são testes educacionais de sensibilidade, não recomendações.
+Simulação por FII usa DY calculado pelo total dos últimos 12 rendimentos dividido pelo preço atual. Valorização usa retorno anualizado do histórico disponível, limitado entre -20% e 20%. Simulação da carteira usa todos os ativos salvos. Posições com quantidade recebem peso pelo valor atual; posições sem quantidade recebem peso igual. Patrimônio inicial assume valor atual da carteira quando existem cotas cadastradas. Projeção só recalcula após clique em **Atualizar projeção**. A análise de expectativa apresenta cenários conservador, de referência e expansivo sobre essas premissas; são testes educacionais de sensibilidade, não recomendações.
 
 ## GitHub Pages
 
@@ -142,11 +142,11 @@ URL esperada: `https://pedrh77.github.io/fii-future/`.
 
 ## Fluxo inicial
 
-Dashboard começa pedindo até 10 tickers. Carteira fica salva localmente no navegador. Backend busca cada fundo, cruza dados CVM, calcula indicadores e monta ranking somente da seleção. Tela `FIIs` mantém o catálogo disponível conforme a fonte configurada e aceita cadastro manual de tickers ausentes.
+Dashboard começa pedindo até 10 tickers. Carteira fica salva localmente no navegador. Snapshot estático cruza mercado e CVM, calcula indicadores e monta ranking somente da seleção. Tela `FIIs` mantém catálogo público e aceita cadastro manual de tickers ausentes.
 
 ## Aporte inteligente
 
-Distribuição usa proporção dos scores e limita cada ativo a 40% do valor. Opções: 3, 5 ou 10 fundos mais bem classificados.
+Distribuição considera score, valor atual de cada posição e cotação da cota. Resultado recomenda quantidades inteiras, mostra custo por ativo e preserva saldo insuficiente para nova cota. Opções: 3, 5 ou 10 fundos da carteira.
 
 ## Disclaimer
 

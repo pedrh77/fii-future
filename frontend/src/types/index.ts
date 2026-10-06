@@ -11,4 +11,4 @@ export interface FiiPerformance { ticker: string; name?: string; assetType?: str
 export interface SimulationInput { initialAmount: number; monthlyContribution: number; years: number; annualDividendYield: number; annualAppreciation: number; reinvestDividends: boolean }
 export interface SimulationPeriod { year: number; invested: number; portfolioValue: number; accumulatedDividends: number; estimatedMonthlyIncome: number }
 export interface SimulationResult { finalPortfolioValue: number; totalInvested: number; totalDividends: number; estimatedMonthlyIncome: number; periods: SimulationPeriod[]; assumptions?: { annualDividendYield: number; annualAppreciation: number } }
-export interface Allocation { ticker: string; score: number; amount: number; percentage: number }
+export interface Allocation { ticker: string; score: number; price: number; quantity: number; currentValue: number; amount: number; percentage: number; targetPercentage: number }

@@ -281,6 +281,9 @@ input:focus, select:focus { border-color: #4ddda877; box-shadow: 0 0 0 3px #34d3
 .simulator-grid { display: grid; grid-template-columns: 360px 1fr; gap: 18px; align-items: start; }
 .simulator-form { padding: 0 22px 22px; position: sticky; top: 91px; }
 .simulator-form .panel-head { padding-left: 0; padding-right: 0; }
+.projection-pending { display: flex; gap: 12px; align-items: center; padding: 15px 17px; border: 1px solid #5eead433; background: #5eead40a; border-radius: 12px; color: #5eead4; }
+.projection-pending b { display: block; font-size: 11px; }
+.projection-pending p { margin: 4px 0 0; color: #8292a6; font-size: 10px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 10px; margin: 16px 0; }
 .number-field > div { display: flex; align-items: center; background: #0c1929; border: 1px solid #26354a; border-radius: 8px; overflow: hidden; }
 .number-field > div:focus-within { border-color: #4ddda877; }
@@ -319,10 +322,16 @@ input:focus, select:focus { border-color: #4ddda877; box-shadow: 0 0 0 3px #34d3
 .allocation-controls { display: grid; grid-template-columns: 1.2fr 1fr auto; gap: 10px; align-items: end; }
 .allocation-controls .primary-button { height: 42px; }
 .allocations { margin-top: 20px; display: flex; flex-direction: column; }
-.allocations > div { display: grid; grid-template-columns: 27px 1fr 1fr 1fr 45px; align-items: center; min-height: 47px; border-top: 1px solid #ffffff0c; font-size: 10px; }
-.allocations small { color: #68798d; }
+.allocations > div { display: grid; grid-template-columns: 27px 1.35fr .8fr .8fr 1fr; gap: 8px; align-items: center; min-height: 58px; border-top: 1px solid #ffffff0c; font-size: 10px; }
+.allocations span { min-width: 0; }
+.allocations span > b, .allocations span > small { display: block; }
+.allocations small { color: #68798d; margin-top: 3px; }
 .allocations strong { font-family: 'DM Mono'; text-align: right; }
 .allocations em { color: #6ee7b7; font-style: normal; text-align: right; }
+.allocation-total strong, .allocation-total em { display: block; }
+.allocation-total em { margin-top: 3px; font-size: 8px; }
+.allocation-summary { display: flex; justify-content: flex-end; gap: 18px; margin-top: 14px; padding-top: 13px; border-top: 1px solid #ffffff12; color: #718197; font-size: 9px; }
+.allocation-summary b { margin-left: 4px; color: #d9e5f2; font-family: 'DM Mono'; }
 .allocation-check { width: 19px; height: 19px; display: grid; place-items: center; color: #54dfad; background: #34d39912; border-radius: 5px; }
 footer { border-top: 1px solid #ffffff10; max-width: 1184px; margin: auto; padding: 28px 0 38px; display: grid; grid-template-columns: 150px 1fr; gap: 30px; color: #526277; font-size: 9px; line-height: 1.6; }
 footer b { color: #8291a3; }

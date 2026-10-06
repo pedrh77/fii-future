@@ -38,6 +38,24 @@ describe('score and contribution allocation', () => {
     expect(Math.max(...result.map((item) => item.percentage))).toBeLessThanOrEqual(40);
     expect(result.reduce((sum, item) => sum + item.amount, 0)).toBeCloseTo(500, 1);
   });
+
+  it('buys only whole shares without exceeding available cash', () => {
+    const result = allocateContribution(250, [
+      { ticker: 'AAA11', price: 63.4, score: 80 }, { ticker: 'BBB11', price: 27.9, score: 70 }, { ticker: 'CCC11', price: 11.2, score: 60 },
+    ]);
+    expect(result.every((item) => Number.isInteger(item.quantity))).toBe(true);
+    expect(result.every((item) => item.amount === Math.round(item.quantity * item.price * 100) / 100)).toBe(true);
+    expect(result.reduce((sum, item) => sum + item.amount, 0)).toBeLessThanOrEqual(250);
+  });
+
+  it('prioritizes positions below their target weight', () => {
+    const result = allocateContribution(100, [
+      { ticker: 'AAA11', price: 10, score: 70 }, { ticker: 'BBB11', price: 10, score: 70 }, { ticker: 'CCC11', price: 10, score: 70 },
+    ], [{ ticker: 'AAA11', quantity: 30 }]);
+    expect(result.find((item) => item.ticker === 'AAA11')?.quantity).toBe(0);
+    expect(result.find((item) => item.ticker === 'BBB11')?.quantity).toBeGreaterThan(0);
+    expect(result.find((item) => item.ticker === 'CCC11')?.quantity).toBeGreaterThan(0);
+  });
 });
 
 describe('fundamental calculations', () => {

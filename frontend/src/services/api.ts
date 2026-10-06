@@ -1,4 +1,5 @@
 import type { Allocation, Fii, FiiDividend, FiiPerformance, FiiPriceHistory, SimulationInput, SimulationResult } from '../types';
+import type { PortfolioPosition } from './portfolio';
 
 const apiOrigin = String(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
@@ -156,13 +157,66 @@ export const api = {
     const result = simulateLocally({ initialAmount: input.initialAmount, monthlyContribution: input.monthlyContribution, years: input.years, annualDividendYield: input.annualDividendYield, annualAppreciation: input.annualAppreciation, reinvestDividends: input.reinvestDividends ?? true });
     return { ...result, assumptions: { annualDividendYield: input.annualDividendYield, annualAppreciation: input.annualAppreciation } };
   }),
-  allocate: async (amount: number, count: 3 | 5 | 10, tickers?: string[]) => request<Allocation[]>('/contributions', { method: 'POST', body: JSON.stringify({ amount, count, tickers }) }).catch(async () => {
-    const selected = (await analyzeStatically(tickers ?? [])).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, count);
-    const totalScore = selected.reduce((sum, item) => sum + Math.max(item.score ?? 0, 1), 0);
-    return selected.map((item) => {
-      const percentage = Math.min(40, Math.max(item.score ?? 0, 1) / Math.max(totalScore, 1) * 100);
-      return { ticker: item.ticker, score: item.score ?? 0, amount: roundMoney(amount * percentage / 100), percentage: roundMoney(percentage) };
+  allocate: async (amount: number, count: 3 | 5 | 10, positions: PortfolioPosition[]) => {
+    const tickers = positions.map((position) => position.ticker);
+    return request<Allocation[]>('/contributions', { method: 'POST', body: JSON.stringify({ amount, count, tickers, positions }) }).catch(async () => {
+      const selected = (await analyzeStatically(tickers)).filter((item) => (item.price ?? 0) > 0 && (item.score ?? 0) > 0).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, count);
+      return allocateWholeShares(amount, selected, positions);
     });
-  }),
+  },
   analyzePortfolio: async (tickers: string[]) => request<Fii[]>('/portfolio/analyze', { method: 'POST', body: JSON.stringify({ tickers }) }).catch(() => analyzeStatically(tickers)),
 };
+
+function allocateWholeShares(amount: number, selected: Fii[], positions: PortfolioPosition[]): Allocation[] {
+  if (amount <= 0 || !selected.length) return [];
+  const quantityByTicker = new Map(positions.map((position) => [position.ticker, position.quantity]));
+  const totalScore = selected.reduce((sum, item) => sum + (item.score ?? 0), 0);
+  const targetPercentages = capWeights(selected.map((item) => (item.score ?? 0) / Math.max(totalScore, 1) * 100));
+  const currentValues = selected.map((item) => (quantityByTicker.get(item.ticker) ?? 0) * item.price!);
+  const portfolioAfterContribution = currentValues.reduce((sum, value) => sum + value, 0) + amount;
+  let gaps = selected.map((_, index) => Math.max(0, portfolioAfterContribution * targetPercentages[index]! / 100 - currentValues[index]!));
+  if (!gaps.some((gap) => gap > 0)) gaps = targetPercentages.map((percentage) => amount * percentage / 100);
+  const gapTotal = gaps.reduce((sum, gap) => sum + gap, 0);
+  const quantities = selected.map((item, index) => Math.floor(amount * gaps[index]! / Math.max(gapTotal, 1) / item.price!));
+  let spent = quantities.reduce((sum, quantity, index) => sum + quantity * selected[index]!.price!, 0);
+  while (true) {
+    const affordable = selected.map((item, index) => ({ item, index, room: gaps[index]! - quantities[index]! * item.price! }))
+      .filter(({ item, room }) => room > 0 && item.price! <= amount - spent + .001)
+      .sort((a, b) => b.room - a.room || (b.item.score ?? 0) - (a.item.score ?? 0));
+    if (!affordable.length) break;
+    const choice = affordable[0]!;
+    quantities[choice.index] = quantities[choice.index]! + 1;
+    spent += choice.item.price!;
+  }
+  return selected.map((item, index) => {
+    const allocated = quantities[index]! * item.price!;
+    return {
+      ticker: item.ticker,
+      score: item.score ?? 0,
+      price: item.price!,
+      quantity: quantities[index]!,
+      currentValue: roundMoney(currentValues[index]!),
+      amount: roundMoney(allocated),
+      percentage: roundMoney(allocated / amount * 100),
+      targetPercentage: roundMoney(targetPercentages[index]!),
+    };
+  });
+}
+
+function capWeights(raw: number[]) {
+  if (raw.length < 3) return raw;
+  const result = Array(raw.length).fill(0) as number[];
+  let active = raw.map((_, index) => index);
+  let remaining = 100;
+  while (active.length) {
+    const total = active.reduce((sum, index) => sum + raw[index]!, 0);
+    const over = active.filter((index) => remaining * raw[index]! / Math.max(total, 1) > 40);
+    if (!over.length) {
+      for (const index of active) result[index] = remaining * raw[index]! / Math.max(total, 1);
+      break;
+    }
+    for (const index of over) { result[index] = 40; remaining -= 40; }
+    active = active.filter((index) => !over.includes(index));
+  }
+  return result;
+}
