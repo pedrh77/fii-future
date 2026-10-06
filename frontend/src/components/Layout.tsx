@@ -1,6 +1,6 @@
-import { BarChart3, BriefcaseBusiness, Calculator, LayoutDashboard, Menu, TrendingUp, X } from 'lucide-react';
-import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { BarChart3, BriefcaseBusiness, Calculator, LayoutDashboard, TrendingUp } from 'lucide-react';
+import { useEffect } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
 const links = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -11,13 +11,13 @@ const links = [
 ];
 
 export function Layout() {
-  const [open, setOpen] = useState(false);
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
   return <div className="app-shell">
     <header className="topbar">
       <NavLink to="/" className="brand"><span className="brand-mark"><TrendingUp size={20} /></span><span>FII <b>Future</b></span></NavLink>
-      <nav id="main-navigation" className={open ? 'nav open' : 'nav'}>{links.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} end={to === '/'} onClick={() => setOpen(false)}><Icon size={17} />{label}</NavLink>)}</nav>
+      <nav id="main-navigation" className="nav" aria-label="Navegação principal">{links.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} end={to === '/'}><Icon size={17} /><span>{label}</span></NavLink>)}</nav>
       <div className="market-status"><i /> mercado + histórico</div>
-      <button className="menu-button" onClick={() => setOpen(!open)} aria-label={open ? 'Fechar menu' : 'Abrir menu'} aria-expanded={open} aria-controls="main-navigation">{open ? <X /> : <Menu />}</button>
     </header>
     <main><Outlet /></main>
     <footer><b>FII Future</b><p>Este sistema possui finalidade exclusivamente educacional e informativa. Os dados e cálculos apresentados não constituem recomendação de compra ou venda de ativos. Resultados históricos não garantem resultados futuros.</p></footer>
