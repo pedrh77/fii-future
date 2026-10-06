@@ -52,9 +52,19 @@ describe('score and contribution allocation', () => {
     const result = allocateContribution(100, [
       { ticker: 'AAA11', price: 10, score: 70 }, { ticker: 'BBB11', price: 10, score: 70 }, { ticker: 'CCC11', price: 10, score: 70 },
     ], [{ ticker: 'AAA11', quantity: 30 }]);
-    expect(result.find((item) => item.ticker === 'AAA11')?.quantity).toBe(0);
+    expect(result.find((item) => item.ticker === 'AAA11')?.quantity ?? 0).toBe(0);
     expect(result.find((item) => item.ticker === 'BBB11')?.quantity).toBeGreaterThan(0);
     expect(result.find((item) => item.ticker === 'CCC11')?.quantity).toBeGreaterThan(0);
+  });
+
+  it('selects underweight funds before an overweight higher-score fund', () => {
+    const result = allocateContribution(100, [
+      { ticker: 'AAA11', price: 10, score: 100 }, { ticker: 'BBB11', price: 10, score: 80 },
+      { ticker: 'CCC11', price: 10, score: 70 }, { ticker: 'DDD11', price: 10, score: 60 },
+    ], [{ ticker: 'AAA11', quantity: 100 }], 2);
+    expect(result.map((item) => item.ticker)).toEqual(['BBB11', 'CCC11']);
+    expect(result.every((item) => item.currentPercentage === 0)).toBe(true);
+    expect(result.every((item) => item.afterPercentage > 0)).toBe(true);
   });
 });
 

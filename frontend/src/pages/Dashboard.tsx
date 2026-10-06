@@ -16,7 +16,7 @@ export function Dashboard() {
     savePortfolio(next);
     setPositions(next);
   };
-  return positions.length ? <PortfolioDashboard tickers={positions.map((position) => position.ticker)} /> : <PortfolioSetup save={save} />;
+  return positions.length ? <PortfolioDashboard positions={positions} /> : <PortfolioSetup save={save} />;
 }
 
 function PortfolioSetup({ save }: { save: (tickers: string[]) => void }) {
@@ -32,28 +32,37 @@ function PortfolioSetup({ save }: { save: (tickers: string[]) => void }) {
   </div>;
 }
 
-function PortfolioDashboard({ tickers }: { tickers: string[] }) {
+function PortfolioDashboard({ positions }: { positions: PortfolioPosition[] }) {
+  const tickers = positions.map((position) => position.ticker);
   const { data: fiis, loading, error, retry } = useAsync(() => api.analyzePortfolio(tickers), [tickers.join(',')]);
   if (loading) return <div className="page"><Loading /></div>;
   if (error || !fiis) return <div className="page"><ErrorState message={error} retry={retry} /><Link className="secondary-button center-button" to="/carteira">Editar carteira</Link></div>;
   const complete = fiis.filter((fii) => fii.score !== undefined);
-  const avgDy = average(complete, (item) => item.dividendYield12m);
-  const avgPvp = average(complete, (item) => item.pvp);
-  const avgAppreciation = average(complete, (item) => item.annualAppreciation);
+  const avgDy = weightedAverage(complete, positions, (item) => item.dividendYield12m);
+  const avgPvp = weightedAverage(complete, positions, (item) => item.pvp);
+  const avgAppreciation = weightedAverage(complete, positions, (item) => item.annualAppreciation);
+  const totalCurrent = positions.reduce((sum, position) => sum + position.quantity * (fiis.find((item) => item.ticker === position.ticker)?.price ?? 0), 0);
   const best = [...complete].sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0];
 
   return <div className="page dashboard">
     <section className="hero portfolio-hero"><div><span className="eyebrow"><Sparkles size={14}/> Sua carteira em perspectiva</span><h1>Seus fundos.<br/><em>Uma visão clara.</em></h1><p>Indicadores calculados sobre FIIs escolhidos por você, usando dados públicos e históricos.</p><div className="hero-actions"><Link className="primary-button" to="/simulador">Simular carteira <ArrowRight size={17}/></Link><Link className="secondary-button" to="/carteira">Gerenciar carteira</Link></div></div><div className="portfolio-symbols">{fiis.slice(0, 6).map((fii, index) => <div key={fii.ticker} style={{ transform: `translate(${index % 2 ? 24 : -8}px, ${index * -5}px)` }}><b>{fii.ticker}</b><span>{money(fii.price)}</span></div>)}</div></section>
-    <section className="metric-grid"><Metric icon={Landmark} label="FIIs na carteira" value={number(fiis.length)} detail={`${complete.length} com análise histórica`}/><Metric icon={CircleDollarSign} label="Dividend Yield médio" value={percent(avgDy)} detail="últimos 12 meses" positive/><Metric icon={PieChart} label={avgPvp === undefined ? 'Valorização anual média' : 'P/VP médio'} value={avgPvp === undefined ? percent(avgAppreciation) : number(avgPvp)} detail="fundos selecionados"/><Metric icon={Target} label="Maior score" value={best ? `${best.score}/100` : '—'} detail={best?.ticker ?? 'dados insuficientes'} positive/></section>
+    <section className="metric-grid"><Metric icon={totalCurrent > 0 ? WalletCards : Landmark} label={totalCurrent > 0 ? 'Patrimônio atual' : 'FIIs na carteira'} value={totalCurrent > 0 ? money(totalCurrent) : number(fiis.length)} detail={`${complete.length} com análise disponível`}/><Metric icon={CircleDollarSign} label="Dividend Yield médio" value={percent(avgDy)} detail={totalCurrent > 0 ? 'ponderado pelo valor atual' : 'média simples da seleção'} positive/><Metric icon={PieChart} label={avgPvp === undefined ? 'Valorização anual média' : 'P/VP médio'} value={avgPvp === undefined ? percent(avgAppreciation) : number(avgPvp)} detail={totalCurrent > 0 ? 'ponderado pela carteira' : 'fundos selecionados'}/><Metric icon={Target} label="Maior score" value={best ? `${best.score}/100` : '—'} detail={best?.ticker ?? 'dados insuficientes'} positive/></section>
     <section className="info-panel"><Info size={18}/><div><b>Como ler este painel</b><p>Score compara qualidade, preço, renda e liquidez. DY mostra renda passada. P/VP compara cotação com patrimônio. Nenhum indicador isolado representa recomendação.</p></div></section>
     <MarketLeaders/>
     <section className="dashboard-grid"><div className="panel ranking-preview"><div className="panel-head"><div><span className="kicker">SUA SELEÇÃO</span><h2>Análise da carteira</h2></div><Link to="/fiis">Explorar FIIs <ArrowRight size={15}/></Link></div><div className="mini-table"><div className="mini-row header"><span>Ativo</span><span>Preço</span><span>DY</span><span>Score</span></div>{fiis.map((fii) => <Link to={`/fii/${fii.ticker}`} className="mini-row" key={fii.ticker}><span><b>{fii.ticker}</b><small>{fii.segment ?? fii.name ?? 'Dados parciais'}</small></span><span>{money(fii.price)}</span><span className="green">{percent(fii.dividendYield12m)}</span><ScoreBadge score={fii.score}/></Link>)}</div></div><div className="panel next-step"><span className="kicker">PRÓXIMO PASSO</span><div className="icon-disc"><WalletCards/></div><h2>Projete aportes e renda</h2><p>Use premissas históricas dos seus FIIs para visualizar patrimônio e renda mensal.</p><Link className="primary-button" to="/simulador">Começar simulação <ArrowRight size={17}/></Link><small>Projeção educacional</small></div></section>
   </div>;
 }
 
-const average = (fiis: Fii[], get: (fii: Fii) => number | undefined) => {
-  const values = fiis.map(get).filter((value): value is number => value !== undefined);
-  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : undefined;
+const weightedAverage = (fiis: Fii[], positions: PortfolioPosition[], get: (fii: Fii) => number | undefined) => {
+  const values = fiis.flatMap((fii) => {
+    const value = get(fii);
+    if (value === undefined) return [];
+    const position = positions.find((item) => item.ticker === fii.ticker);
+    return [{ value, weight: (position?.quantity ?? 0) * (fii.price ?? 0) }];
+  });
+  const weightTotal = values.reduce((sum, item) => sum + item.weight, 0);
+  if (weightTotal > 0) return values.reduce((sum, item) => sum + item.value * item.weight, 0) / weightTotal;
+  return values.length ? values.reduce((sum, item) => sum + item.value, 0) / values.length : undefined;
 };
 
 function Metric({ icon: Icon, label, value, detail, positive = false }: { icon: typeof Landmark; label: string; value: string; detail: string; positive?: boolean }) { return <article className="metric-card"><div className="metric-icon"><Icon size={20}/></div><div><span>{label}</span><strong className={positive ? 'green' : ''}>{value}</strong><small>{detail}</small></div></article>; }
@@ -62,7 +71,7 @@ function MarketLeaders() {
   const [period, setPeriod] = useState<'day' | 'week' | 'month'>('day');
   const { data = [], loading, error, retry } = useAsync(() => api.getPerformance(period), [period]);
   const labels = { day: 'Dia', week: 'Semana', month: 'Mês' };
-  return <section className="panel market-leaders"><div className="panel-head"><div><span className="kicker">DESTAQUES DO MERCADO</span><h2>Melhores fundos do período</h2><p>Variação de preço, sem dividendos. Dia exige liquidez acima de R$ 100 mil; semana e mês usam amostra dos 120 fundos mais líquidos, atualizada diariamente.</p></div><div className="period-tabs">{(Object.keys(labels) as Array<keyof typeof labels>).map((key) => <button key={key} className={period === key ? 'active' : ''} onClick={() => setPeriod(key)}>{labels[key]}</button>)}</div></div>{loading ? <Loading/> : error ? <ErrorState message={error} retry={retry}/> : data.length ? <div className="leader-grid">{data.map((item, index) => <LeaderCard key={item.ticker} item={item} rank={index + 1}/>)}</div> : <div className="leader-empty">Sem dados suficientes no retrato diário deste período.</div>}</section>;
+  return <section className="panel market-leaders"><div className="panel-head"><div><span className="kicker">DESTAQUES DO MERCADO</span><h2>Melhores fundos do período</h2><p>Variação de preço, sem dividendos. Dia exige liquidez acima de R$ 100 mil; semana e mês usam amostra dos 200 fundos mais líquidos, atualizada diariamente.</p></div><div className="period-tabs">{(Object.keys(labels) as Array<keyof typeof labels>).map((key) => <button key={key} className={period === key ? 'active' : ''} onClick={() => setPeriod(key)}>{labels[key]}</button>)}</div></div>{loading ? <Loading/> : error ? <ErrorState message={error} retry={retry}/> : data.length ? <div className="leader-grid">{data.map((item, index) => <LeaderCard key={item.ticker} item={item} rank={index + 1}/>)}</div> : <div className="leader-empty">Sem dados suficientes no retrato diário deste período.</div>}</section>;
 }
 
 function LeaderCard({ item, rank }: { item: FiiPerformance; rank: number }) {

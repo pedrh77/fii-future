@@ -4,7 +4,7 @@ import AdmZip from 'adm-zip';
 import { parse } from 'csv-parse/sync';
 
 const fundTypes = new Set(['fii', 'fi-agro', 'fi-infra', 'fip', 'fidc']);
-const historyLimit = Number(process.env.SNAPSHOT_LIMIT ?? 120);
+const historyLimit = Number(process.env.SNAPSHOT_LIMIT ?? 200);
 const catalogUrl = 'https://brapi.dev/api/quote/list?type=fund&limit=5000';
 const headers = { 'User-Agent': 'FII-Future/1.0' };
 

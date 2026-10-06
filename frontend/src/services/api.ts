@@ -38,7 +38,11 @@ function publicCatalog() {
       price: item.close,
       changeDay: item.change,
       liquidity: item.close && item.volume ? item.close * item.volume : undefined,
-    })));
+    })))
+    .catch((error) => {
+      publicCatalogRequest = undefined;
+      throw error;
+    });
   return publicCatalogRequest;
 }
 
@@ -48,6 +52,10 @@ function staticSnapshot() {
     .then((response) => {
       if (!response.ok) throw new Error('Snapshot estático indisponível.');
       return response.json() as Promise<StaticSnapshot>;
+    })
+    .catch((error) => {
+      staticSnapshotRequest = undefined;
+      throw error;
     });
   return staticSnapshotRequest;
 }
@@ -160,59 +168,92 @@ export const api = {
   allocate: async (amount: number, count: 1 | 3 | 5 | 10, positions: PortfolioPosition[]) => {
     const tickers = positions.map((position) => position.ticker);
     return request<Allocation[]>('/contributions', { method: 'POST', body: JSON.stringify({ amount, count, tickers, positions }) }).catch(async () => {
-      const selected = (await analyzeStatically(tickers)).filter((item) => (item.price ?? 0) > 0 && (item.score ?? 0) > 0).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, count);
-      return allocateWholeShares(amount, selected, positions);
+      const candidates = (await analyzeStatically(tickers)).filter((item) => (item.price ?? 0) > 0 && (item.score ?? 0) > 0);
+      return allocateWholeShares(amount, candidates, positions, count);
     });
   },
   analyzePortfolio: async (tickers: string[]) => request<Fii[]>('/portfolio/analyze', { method: 'POST', body: JSON.stringify({ tickers }) }).catch(() => analyzeStatically(tickers)),
 };
 
-function allocateWholeShares(amount: number, selected: Fii[], positions: PortfolioPosition[]): Allocation[] {
-  if (amount <= 0 || !selected.length) return [];
+function allocateWholeShares(amount: number, candidates: Fii[], positions: PortfolioPosition[], count: number): Allocation[] {
+  if (amount <= 0 || !candidates.length || count <= 0) return [];
   const quantityByTicker = new Map(positions.map((position) => [position.ticker, position.quantity]));
-  const totalScore = selected.reduce((sum, item) => sum + (item.score ?? 0), 0);
-  const targetPercentages = capWeights(selected.map((item) => (item.score ?? 0) / Math.max(totalScore, 1) * 100));
-  const currentValues = selected.map((item) => (quantityByTicker.get(item.ticker) ?? 0) * item.price!);
-  const portfolioAfterContribution = currentValues.reduce((sum, value) => sum + value, 0) + amount;
-  let gaps = selected.map((_, index) => Math.max(0, portfolioAfterContribution * targetPercentages[index]! / 100 - currentValues[index]!));
-  if (!gaps.some((gap) => gap > 0)) gaps = targetPercentages.map((percentage) => amount * percentage / 100);
-  const gapTotal = gaps.reduce((sum, gap) => sum + gap, 0);
-  const quantities = selected.map((item, index) => Math.floor(amount * gaps[index]! / Math.max(gapTotal, 1) / item.price!));
-  let spent = quantities.reduce((sum, quantity, index) => sum + quantity * selected[index]!.price!, 0);
+  const analyzed = candidates
+    .map((item) => ({ item, currentValue: (quantityByTicker.get(item.ticker) ?? 0) * item.price! }));
+  if (!analyzed.length) return [];
+  const portfolioValue = analyzed.reduce((sum, item) => sum + item.currentValue, 0);
+  const fullTargets = capWeights(analyzed.map((item) => item.item.score ?? 0));
+  const portfolioAfterContribution = portfolioValue + amount;
+  const ranked = analyzed.map((entry, index) => ({
+    ...entry,
+    targetPercentage: fullTargets[index]!,
+    gap: Math.max(0, portfolioAfterContribution * fullTargets[index]! / 100 - entry.currentValue),
+  })).filter((entry) => entry.item.price! <= amount)
+    .sort((a, b) => b.gap - a.gap || (b.item.score ?? 0) - (a.item.score ?? 0) || a.item.ticker.localeCompare(b.item.ticker));
+  if (!ranked.length) return [];
+  const selected = ranked.slice(0, Math.min(count, ranked.length));
+  if (portfolioValue === 0) {
+    const initialTargets = capWeights(selected.map((entry) => entry.item.score ?? 0));
+    selected.forEach((entry, index) => {
+      entry.targetPercentage = initialTargets[index]!;
+      entry.gap = amount * initialTargets[index]! / 100;
+    });
+  }
+  const gapTotal = selected.reduce((sum, entry) => sum + entry.gap, 0);
+  const targetTotal = selected.reduce((sum, entry) => sum + entry.targetPercentage, 0);
+  const desired = selected.map((entry) => {
+    const gapShare = gapTotal > 0 ? entry.gap / gapTotal : 0;
+    const targetShare = targetTotal > 0 ? entry.targetPercentage / targetTotal : 1 / selected.length;
+    return gapTotal >= amount ? amount * gapShare : entry.gap + (amount - gapTotal) * targetShare;
+  });
+  const allocationCap = selected.length >= 3 ? amount * 0.4 : amount;
+  const quantities = selected.map((entry, index) => Math.floor(Math.min(desired[index]!, allocationCap) / entry.item.price!));
+  let spent = quantities.reduce((sum, quantity, index) => sum + quantity * selected[index]!.item.price!, 0);
   while (true) {
-    const affordable = selected.map((item, index) => ({ item, index, room: gaps[index]! - quantities[index]! * item.price! }))
-      .filter(({ item, room }) => room > 0 && item.price! <= amount - spent + .001)
-      .sort((a, b) => b.room - a.room || (b.item.score ?? 0) - (a.item.score ?? 0));
+    const affordable = selected.map((entry, index) => {
+      const allocated = quantities[index]! * entry.item.price!;
+      return { entry, index, penalty: Math.abs(allocated + entry.item.price! - desired[index]!) - Math.abs(allocated - desired[index]!) };
+    }).filter(({ entry, index, penalty }) => penalty <= 0 && entry.item.price! <= amount - spent + .001 && (quantities[index]! + 1) * entry.item.price! <= allocationCap + .001)
+      .sort((a, b) => a.penalty - b.penalty || (b.entry.item.score ?? 0) - (a.entry.item.score ?? 0));
     if (!affordable.length) break;
     const choice = affordable[0]!;
     quantities[choice.index] = quantities[choice.index]! + 1;
-    spent += choice.item.price!;
+    spent += choice.entry.item.price!;
   }
-  return selected.map((item, index) => {
-    const allocated = quantities[index]! * item.price!;
+  const finalPortfolioValue = portfolioValue + spent;
+  return selected.map((entry, index) => {
+    const allocated = quantities[index]! * entry.item.price!;
     return {
-      ticker: item.ticker,
-      score: item.score ?? 0,
-      price: item.price!,
+      ticker: entry.item.ticker,
+      score: entry.item.score ?? 0,
+      price: entry.item.price!,
       quantity: quantities[index]!,
-      currentValue: roundMoney(currentValues[index]!),
+      currentValue: roundMoney(entry.currentValue),
       amount: roundMoney(allocated),
       percentage: roundMoney(allocated / amount * 100),
-      targetPercentage: roundMoney(targetPercentages[index]!),
+      currentPercentage: portfolioValue > 0 ? roundMoney(entry.currentValue / portfolioValue * 100) : 0,
+      targetPercentage: roundMoney(entry.targetPercentage),
+      afterPercentage: finalPortfolioValue > 0 ? roundMoney((entry.currentValue + allocated) / finalPortfolioValue * 100) : 0,
     };
-  });
+  }).filter((item) => item.quantity > 0);
 }
 
-function capWeights(raw: number[]) {
-  if (raw.length < 3) return raw;
-  const result = Array(raw.length).fill(0) as number[];
-  let active = raw.map((_, index) => index);
+function capWeights(weights: number[]) {
+  if (!weights.length) return [];
+  const safeWeights = weights.map((weight) => Math.max(0, weight));
+  if (!safeWeights.some(Boolean)) return safeWeights.map(() => 100 / safeWeights.length);
+  if (safeWeights.length < 3) {
+    const total = safeWeights.reduce((sum, weight) => sum + weight, 0);
+    return safeWeights.map((weight) => weight / total * 100);
+  }
+  const result = Array(safeWeights.length).fill(0) as number[];
+  let active = safeWeights.map((_, index) => index);
   let remaining = 100;
   while (active.length) {
-    const total = active.reduce((sum, index) => sum + raw[index]!, 0);
-    const over = active.filter((index) => remaining * raw[index]! / Math.max(total, 1) > 40);
+    const total = active.reduce((sum, index) => sum + safeWeights[index]!, 0);
+    const over = active.filter((index) => remaining * safeWeights[index]! / Math.max(total, 1) > 40);
     if (!over.length) {
-      for (const index of active) result[index] = remaining * raw[index]! / Math.max(total, 1);
+      for (const index of active) result[index] = remaining * safeWeights[index]! / Math.max(total, 1);
       break;
     }
     for (const index of over) { result[index] = 40; remaining -= 40; }

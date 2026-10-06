@@ -126,7 +126,7 @@ Workflow `.github/workflows/pages.yml` gera o snapshot e publica o frontend apó
 
 1. Em **Settings > Pages**, selecione **GitHub Actions** como fonte.
 2. Publique a branch `main`. Nenhum servidor, token ou variável de ambiente é necessário.
-3. Snapshot cobre histórico e rendimentos dos 120 fundos mais líquidos. Fundamentos CVM cobrem FIIs identificados pelo ISIN oficial. Catálogo público inclui mais de 400 fundos negociados.
+3. Snapshot cobre histórico e rendimentos dos 200 fundos mais líquidos. Fundamentos CVM cobrem FIIs identificados pelo ISIN oficial. Catálogo público inclui mais de 400 fundos negociados.
 
 URL esperada: `https://pedrh77.github.io/fii-future/`.
 
@@ -135,7 +135,7 @@ URL esperada: `https://pedrh77.github.io/fii-future/`.
 - CVM publica informes em lote e pode ter atraso, reapresentações ou campos vazios.
 - CNPJ do provider de mercado faz vínculo entre ticker e informe CVM.
 - Liquidez pode ficar ausente quando fonte gratuita não fornece volume normalizado.
-- Snapshot histórico cobre até 120 fundos líquidos. Fundamentos como patrimônio, cotistas, VP por cota e P/VP usam informe mensal oficial da CVM.
+- Snapshot histórico cobre até 200 fundos líquidos. Fundamentos como patrimônio, cotistas, VP por cota e P/VP usam informe mensal oficial da CVM.
 - Sem token BRAPI Pro, universo público mostra mais de 400 fundos negociados com cotação. Fundos apenas cadastrados, inativos ou sem cotação pública podem não aparecer; ainda podem ser digitados manualmente na carteira.
 - Correspondência sem token usa nome do fundo. Renomes recentes podem deixar algum FII com dados parciais.
 - Score e projeções não são recomendação e não garantem resultado.
@@ -146,7 +146,7 @@ Dashboard começa pedindo até 10 tickers. Carteira fica salva localmente no nav
 
 ## Aporte inteligente
 
-Distribuição considera score, valor atual de cada posição e cotação da cota. Resultado recomenda quantidades inteiras, mostra custo por ativo e preserva saldo insuficiente para nova cota. Opções: 3, 5 ou 10 fundos da carteira.
+Distribuição considera score, valor atual de todas as posições, peso-alvo e cotação da cota. Fundos abaixo do peso recebem prioridade antes do rateio. Resultado sugere quantidades inteiras, mostra peso atual, peso posterior, meta e saldo. Opções: 1, 3, 5 ou 10 fundos da carteira.
 
 ## Disclaimer
 

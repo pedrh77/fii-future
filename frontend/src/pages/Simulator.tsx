@@ -1,5 +1,6 @@
 import { Calculator, Check, CircleDollarSign, Info, Lightbulb, PiggyBank, RefreshCcw, ShieldCheck, Sparkles, Target, TrendingUp, WalletCards } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ErrorState } from '../components/States';
 import { useAsync } from '../hooks/useAsync';
@@ -23,11 +24,13 @@ export function Simulator() {
   const [allocationAmount, setAllocationAmount] = useState(500);
   const [allocationCount, setAllocationCount] = useState<1 | 3 | 5 | 10>(3);
   const [allocations, setAllocations] = useState<Allocation[]>([]);
+  const [allocating, setAllocating] = useState(false);
   const [analyzedAssumptions, setAnalyzedAssumptions] = useState<SimulationResult['assumptions']>();
   const [manualAssumptions, setManualAssumptions] = useState({ annualDividendYield: initialInput.annualDividendYield, annualAppreciation: initialInput.annualAppreciation });
   const requiredPortfolio = input.annualDividendYield > 0 ? incomeGoal * 12 / (input.annualDividendYield / 100) : 0;
   const allocationSpent = allocations.reduce((sum, item) => sum + item.amount, 0);
   const allocationRemainder = Math.max(0, allocationAmount - allocationSpent);
+  const hasRecordedShares = positions.some((position) => position.quantity > 0);
   const assumptionBase = analyzedAssumptions ?? manualAssumptions;
   const scenarios = useMemo(() => expectationScenarios(assumptionBase), [assumptionBase.annualDividendYield, assumptionBase.annualAppreciation]);
 
@@ -84,9 +87,13 @@ export function Simulator() {
 
   const allocate = async () => {
     setError('');
+    setAllocating(true);
     try {
-      setAllocations(await api.allocate(allocationAmount, allocationCount, positions));
-    } catch (reason) { setError((reason as Error).message); }
+      if (!positions.length) throw new Error('Adicione FIIs à carteira antes de calcular o aporte.');
+      const next = await api.allocate(allocationAmount, allocationCount, positions);
+      setAllocations(next);
+      if (!next.length) throw new Error('Nenhuma cota cabe no valor disponível ou os fundos não possuem dados suficientes.');
+    } catch (reason) { setAllocations([]); setError((reason as Error).message); } finally { setAllocating(false); }
   };
 
   const applyScenario = (annualDividendYield: number, annualAppreciation: number) => {
@@ -112,7 +119,10 @@ export function Simulator() {
       </div></section>
 
     <section className="planning-grid"><div className="panel goal-card"><div className="icon-disc"><Target /></div><span className="kicker">META DE RENDA</span><h2>Quanto preciso acumular?</h2><p>Com DY estimado de <b>{percent(input.annualDividendYield)}</b> ao ano.</p><NumberField label="Meta mensal desejada" prefix="R$" value={incomeGoal} step={0.01} onChange={setIncomeGoal} /><div className="goal-result"><span>Patrimônio necessário</span><strong>{money(requiredPortfolio)}</strong></div></div>
-      <div className="panel allocation-card"><div className="panel-head"><div><span className="kicker">APORTE INTELIGENTE</span><h2>Como distribuir meu próximo aporte?</h2><p>Considera valor atual da posição, cotação e score. Compra somente cotas inteiras.</p></div></div><div className="allocation-controls"><NumberField label="Valor disponível" prefix="R$" value={allocationAmount} step={0.01} onChange={(value) => { setAllocationAmount(value); setAllocations([]); }} /><label><span>Quantidade de FIIs</span><select value={allocationCount} onChange={(event) => { setAllocationCount(Number(event.target.value) as 1 | 3 | 5 | 10); setAllocations([]); }}><option value={1}>1 fundo</option><option value={3}>3 fundos</option><option value={5}>5 fundos</option><option value={10}>10 fundos</option></select></label><button className="primary-button" onClick={allocate}>Calcular compra</button></div><div className="allocations">{allocations.map((item) => <div key={item.ticker}><span className="allocation-check"><Check size={14} /></span><span><b>{item.ticker}</b><small>Atual {money(item.currentValue)} · Score {Math.round(item.score)}</small></span><span><small>Cota</small><b>{money(item.price)}</b></span><span><small>Comprar</small><b>{item.quantity} cotas</b></span><span className="allocation-total"><strong>{money(item.amount)}</strong><em>{item.percentage}% do aporte</em></span></div>)}</div>{allocations.length > 0 && <div className="allocation-summary"><span>Aporte usado <b>{money(allocationSpent)}</b></span><span>Saldo não utilizado <b>{money(allocationRemainder)}</b></span></div>}<p className="form-note"><Info size={14} /> Prioriza posições abaixo do peso-alvo. Cotação pode mudar até execução da ordem. Não representa recomendação.</p></div></section>
+      <div className="panel allocation-card"><div className="panel-head"><div><span className="kicker">APORTE INTELIGENTE</span><h2>Como distribuir meu próximo aporte?</h2><p>Prioriza posições abaixo do peso-alvo, usa score como qualidade relativa e compra somente cotas inteiras.</p></div></div>
+        <div className={`allocation-context ${hasRecordedShares ? 'ready' : ''}`}><Info size={15} /><div><b>{hasRecordedShares ? 'Rebalanceamento ativo' : 'Distribuição inicial'}</b><p>{hasRecordedShares ? 'Quantidades cadastradas entram no cálculo. Fundos mais abaixo da meta recebem prioridade.' : 'Sem quantidades cadastradas, divisão usa score e cotação. Para rebalancear sua carteira real, informe suas cotas.'}</p></div>{!hasRecordedShares && <Link to="/carteira">Completar carteira</Link>}</div>
+        <div className="allocation-controls"><NumberField label="Valor disponível" prefix="R$" value={allocationAmount} step={0.01} onChange={(value) => { setAllocationAmount(value); setAllocations([]); }} /><label><span>Quantidade de FIIs</span><select value={allocationCount} onChange={(event) => { setAllocationCount(Number(event.target.value) as 1 | 3 | 5 | 10); setAllocations([]); }}><option value={1}>1 fundo</option><option value={3}>3 fundos</option><option value={5}>5 fundos</option><option value={10}>10 fundos</option></select></label><button className="primary-button" onClick={allocate} disabled={allocating || !positions.length}>{allocating ? 'Calculando...' : 'Calcular compra'}</button></div>
+        <div className="allocations">{allocations.map((item) => <div key={item.ticker}><span className="allocation-check"><Check size={14} /></span><span><b>{item.ticker}</b><small>Atual {money(item.currentValue)} · Score {Math.round(item.score)}</small></span><span><small>Cota</small><b>{money(item.price)}</b></span><span><small>Comprar</small><b>{item.quantity} cotas</b></span><span className="allocation-weights"><small>Peso atual → depois</small><b>{percent(item.currentPercentage)} → {percent(item.afterPercentage)}</b><em>Meta {percent(item.targetPercentage)}</em></span><span className="allocation-total"><strong>{money(item.amount)}</strong><em>{percent(item.percentage)} do aporte</em></span></div>)}</div>{allocations.length > 0 && <div className="allocation-summary"><span>Aporte usado <b>{money(allocationSpent)}</b></span><span>Saldo não utilizado <b>{money(allocationRemainder)}</b></span></div>}<p className="form-note"><Info size={14} /> Sugestão matemática baseada nos dados disponíveis. Compare segmento, risco e estratégia antes de investir.</p></div></section>
   </div>;
 }
 

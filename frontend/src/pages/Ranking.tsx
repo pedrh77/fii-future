@@ -32,7 +32,8 @@ export function Ranking({ mode = 'portfolio' }: { mode?: 'portfolio' | 'universe
   const pageSize = 20;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = mode === 'universe' ? filtered.slice((page - 1) * pageSize, page * pageSize) : filtered;
-  useEffect(() => setPage(1), [search, segment, assetType, mode]);
+  useEffect(() => setPage(1), [search, segment, assetType, minDy, maxPvp, minScore, mode]);
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
 
   const includeInPortfolio = (ticker: string) => {
     addTicker(ticker);

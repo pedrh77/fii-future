@@ -19,7 +19,7 @@ export function createContributionRouter(cvm: CvmProvider, market: MarketProvide
       const ranking = tickers?.length
         ? (await Promise.all(tickers.map((ticker) => service.detail(ticker)))).filter((item) => item !== null).sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
         : await service.ranking();
-      response.json(allocateContribution(amount, ranking.slice(0, count), positions));
+      response.json(allocateContribution(amount, ranking, positions, count));
     } catch (error) { next(error); }
   });
   return router;
