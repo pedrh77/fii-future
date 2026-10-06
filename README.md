@@ -88,7 +88,7 @@ Provider de mercado usa endpoints BRAPI v2 documentados:
 - `/api/v2/fii/dividends`
 - `/api/v2/fii/historical`
 
-Sem token Pro, catálogo público BRAPI carrega FIIs, FIAGRO, FI-Infra, FIP e FIDC. Yahoo Finance fornece preço, histórico, nome e dividendos dos tickers escolhidos. Servidor cruza nome do fundo com informe CVM. Com token Pro, vínculo usa CNPJ direto.
+Sem token Pro, catálogo público BRAPI carrega os FIIs, FIAGRO, FI-Infra, FIP e FIDC com cotação disponíveis na listagem gratuita. Yahoo Finance fornece preço, histórico, nome e dividendos dos tickers escolhidos. Servidor cruza nome do fundo com informe CVM. Com token Pro, o backend incorpora também a listagem cadastral completa de FIIs e usa o CNPJ direto.
 
 Dados CVM ficam em cache por 6 horas. Preços e lista ficam por 10 minutos. Histórico fica por 1 hora. Dividendos ficam por 6 horas. Cache usa `Map` em memória e reinicia junto com servidor.
 
@@ -117,7 +117,7 @@ Indicadores ausentes recebem nota neutra/conservadora. Consistência considera a
 
 Simulação ocorre mês a mês. Cada período aplica aporte, valorização e dividendos. Dividendos entram novamente no patrimônio somente quando reinvestimento está ativo. Resultado mostra patrimônio, total aportado, dividendos, renda mensal estimada e pontos anuais.
 
-Simulação por FII usa DY calculado pelo total dos últimos 12 rendimentos dividido pelo preço atual. Valorização usa retorno anualizado do histórico disponível, limitado entre -20% e 20%. Simulação da carteira usa todos os ativos salvos. Posições com quantidade recebem peso pelo valor atual; posições sem quantidade recebem peso igual.
+Simulação por FII usa DY calculado pelo total dos últimos 12 rendimentos dividido pelo preço atual. Valorização usa retorno anualizado do histórico disponível, limitado entre -20% e 20%. Simulação da carteira usa todos os ativos salvos. Posições com quantidade recebem peso pelo valor atual; posições sem quantidade recebem peso igual. A análise de expectativa apresenta cenários conservador, de referência e expansivo sobre essas premissas; são testes educacionais de sensibilidade, não recomendações.
 
 ## GitHub Pages
 
@@ -134,13 +134,13 @@ URL esperada: `https://pedrh77.github.io/fii-future/`.
 - CVM publica informes em lote e pode ter atraso, reapresentações ou campos vazios.
 - CNPJ do provider de mercado faz vínculo entre ticker e informe CVM.
 - Liquidez pode ficar ausente quando fonte gratuita não fornece volume normalizado.
-- Sem token BRAPI Pro, universo público mostra mais de 400 fundos listados, mas cálculo completo ocorre sob demanda para carteira escolhida.
+- Sem token BRAPI Pro, universo público mostra mais de 400 fundos negociados com cotação. Fundos apenas cadastrados, inativos ou sem cotação pública podem não aparecer; ainda podem ser digitados manualmente na carteira.
 - Correspondência sem token usa nome do fundo. Renomes recentes podem deixar algum FII com dados parciais.
 - Score e projeções não são recomendação e não garantem resultado.
 
 ## Fluxo inicial
 
-Dashboard começa pedindo até 10 tickers. Carteira fica salva localmente no navegador. Backend busca cada fundo, cruza dados CVM, calcula indicadores e monta ranking somente da seleção. Tela `FIIs` mantém catálogo completo do mercado para pesquisa.
+Dashboard começa pedindo até 10 tickers. Carteira fica salva localmente no navegador. Backend busca cada fundo, cruza dados CVM, calcula indicadores e monta ranking somente da seleção. Tela `FIIs` mantém o catálogo disponível conforme a fonte configurada e aceita cadastro manual de tickers ausentes.
 
 ## Aporte inteligente
 

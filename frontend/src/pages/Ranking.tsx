@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, ChevronRight, Filter, Info, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { Award, BarChart3, Check, ChevronLeft, ChevronRight, Filter, Info, Plus, Search, ShieldCheck, SlidersHorizontal, Sparkles, TrendingUp } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ScoreBadge } from '../components/ScoreBadge';
@@ -27,7 +27,8 @@ export function Ranking({ mode = 'portfolio' }: { mode?: 'portfolio' | 'universe
   const filtered = useMemo(() => data.filter((fii) =>
     (!search || `${fii.ticker} ${fii.name}`.toLowerCase().includes(search.toLowerCase())) &&
     (!segment || fii.segment === segment) && (!assetType || fii.assetType === assetType) && (!minDy || (fii.dividendYield12m ?? 0) >= Number(minDy)) &&
-    (!maxPvp || (fii.pvp ?? Infinity) <= Number(maxPvp)) && (!minScore || (fii.score ?? 0) >= Number(minScore))), [data, search, segment, assetType, minDy, maxPvp, minScore]);
+    (!maxPvp || (fii.pvp ?? Infinity) <= Number(maxPvp)) && (!minScore || (fii.score ?? 0) >= Number(minScore)))
+    .sort((a, b) => mode === 'portfolio' ? (b.score ?? -1) - (a.score ?? -1) : 0), [data, search, segment, assetType, minDy, maxPvp, minScore, mode]);
   const pageSize = 20;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = mode === 'universe' ? filtered.slice((page - 1) * pageSize, page * pageSize) : filtered;
@@ -40,7 +41,7 @@ export function Ranking({ mode = 'portfolio' }: { mode?: 'portfolio' | 'universe
 
   if (mode === 'portfolio' && !saved.length) return <div className="page"><section className="panel empty-ranking"><h1>Ranking começa pela sua carteira</h1><p>Adicione seus FIIs e depois calculamos e comparamos cada fundo.</p><Link className="primary-button" to="/carteira">Montar carteira</Link></section></div>;
   return <div className="page"><div className="page-heading"><div><span className="eyebrow"><Filter size={14} /> Visão comparativa</span><h1>{mode === 'universe' ? 'Universo de FIIs' : 'Ranking da carteira'}</h1><p>{mode === 'universe' ? 'Explore os fundos disponíveis, pesquise por nome ou segmento e adicione ativos direto à sua carteira.' : 'Classificação dos seus FIIs baseada em indicadores públicos. Não representa recomendação.'}</p></div><div className="result-count"><strong>{filtered.length}</strong><span>{mode === 'universe' ? 'fundos encontrados' : 'fundos na carteira'}</span></div></div>
-    {mode === 'universe' && <section className="info-panel compact-info"><Info size={17}/><div><b>Catálogo ampliado</b><p>Além de FIIs, lista inclui FIAGRO, FI-Infra, FIP e FIDC negociados em bolsa. Use “Tipo” para separar cada classe.</p></div></section>}
+    {mode === 'universe' && <section className="info-panel compact-info"><Info size={17}/><div><b>Fundos com negociação e cotação disponíveis</b><p>O modo gratuito reúne FIIs, FIAGRO, FI-Infra, FIP e FIDC encontrados na listagem pública. Um fundo cadastrado na B3 pode não ter cotação pública; nesse caso, digite o ticker diretamente em “Carteira”. Com BRAPI Pro no backend, o catálogo cadastral completo é incorporado automaticamente.</p><Link to="/carteira">Cadastrar ticker ausente</Link></div></section>}
     <section className={`filter-bar ${mode === 'universe' ? 'catalog-filter-bar' : ''}`}><label className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Pesquisar ticker ou nome" /></label><label><span>Segmento</span><select value={segment} onChange={(event) => setSegment(event.target.value)}><option value="">Todos</option>{segments.map((item) => <option key={item}>{item}</option>)}</select></label>{mode === 'universe' && <label><span>Tipo</span><select value={assetType} onChange={(event) => setAssetType(event.target.value)}><option value="">Todos os fundos</option>{assetTypes.map((item) => <option key={item} value={item}>{fundType(item)}</option>)}</select></label>}{mode === 'portfolio' && <><label><span>DY mínimo (%)</span><input type="number" value={minDy} onChange={(event) => setMinDy(event.target.value)} placeholder="0" /></label><label><span>P/VP máximo</span><input type="number" value={maxPvp} onChange={(event) => setMaxPvp(event.target.value)} placeholder="2" /></label><label><span>Score mínimo</span><input type="number" value={minScore} onChange={(event) => setMinScore(event.target.value)} placeholder="0" /></label><button className="filter-icon" title="Filtros"><SlidersHorizontal size={19} /></button></>}</section>
     {loading
       ? <Loading />
@@ -60,7 +61,13 @@ function CatalogTable({ fiis, portfolioSet, add, start }: { fiis: Fii[]; portfol
 }
 
 function RankingTable({ fiis }: { fiis: Fii[] }) {
-  return <section className="panel table-panel"><div className="data-table"><div className="data-row table-header"><span>#</span><span>Fundo</span><span>Preço</span><span>DY</span><span>P/VP</span><span>Último</span><span>Patrimônio</span><span>Cotistas</span><span>Score</span></div>{fiis.map((fii, index) => <Link to={`/fii/${fii.ticker}`} className="data-row" key={fii.ticker}><span className="rank-number">{String(index + 1).padStart(2, '0')}</span><span className="fund-name"><b>{fii.ticker}</b><small>{fii.name ?? '—'}</small></span><span>{money(fii.price)}</span><span className="green">{percent(fii.dividendYield12m)}</span><span>{number(fii.pvp)}</span><span>{money(fii.lastDividend)}</span><span>{compact(fii.netWorth)}</span><span>{compact(fii.shareholders)}</span><ScoreBadge score={fii.score} /></Link>)}</div></section>;
+  const top = fiis.slice(0, 3);
+  const analyzed = fiis.filter((fii) => fii.score !== undefined).length;
+  return <div className="ranking-experience">
+    <section className="ranking-intro"><div><span><BarChart3 size={17}/></span><div><b>Leitura comparativa</b><p>{analyzed ? `${analyzed} de ${fiis.length} fundos possuem dados suficientes para score.` : 'Os fundos estão salvos, mas o score completo depende da API de fundamentos online.'}</p></div></div><small>Score combina renda, preço, consistência, liquidez e porte. Não é indicação de compra.</small></section>
+    {top.length > 0 && <section className="ranking-podium">{top.map((fii, index) => <Link to={`/fii/${fii.ticker}`} className={`podium-card podium-${index + 1}`} key={fii.ticker}><span className="podium-place">{index === 0 ? <Award size={18}/> : index === 1 ? <Sparkles size={17}/> : <ShieldCheck size={17}/>} {index + 1}º</span><div><h2>{fii.ticker}</h2><p>{fii.segment ?? fii.name ?? 'Dados parciais'}</p></div><strong>{fii.score === undefined ? '—' : fii.score.toFixed(1)}</strong><small>score</small><div className="podium-metrics"><span>DY <b>{percent(fii.dividendYield12m)}</b></span><span>P/VP <b>{number(fii.pvp)}</b></span></div></Link>)}</section>}
+    <section className="panel ranking-board"><div className="ranking-board-head"><div><span className="kicker">CLASSIFICAÇÃO COMPLETA</span><h2>Compare sua carteira</h2></div><span>{fiis.length} ativos</span></div><div className="ranking-list">{fiis.map((fii, index) => <Link to={`/fii/${fii.ticker}`} className="ranking-row" key={fii.ticker}><span className={`ranking-position ${index < 3 ? 'top' : ''}`}>{String(index + 1).padStart(2, '0')}</span><span className="fund-name"><b>{fii.ticker}</b><small>{fii.name ?? fii.segment ?? 'Dados parciais'}</small></span><span className="ranking-metric"><small>Preço</small><b>{money(fii.price)}</b></span><span className="ranking-metric positive"><small>DY 12m</small><b>{percent(fii.dividendYield12m)}</b></span><span className="ranking-metric"><small>P/VP</small><b>{number(fii.pvp)}</b></span><span className="ranking-metric"><small>Liquidez</small><b>{compact(fii.liquidity)}</b></span><span className="ranking-score"><ScoreBadge score={fii.score}/><TrendingUp size={15}/></span></Link>)}</div></section>
+  </div>;
 }
 
 export const Fiis = () => <Ranking mode="universe" />;

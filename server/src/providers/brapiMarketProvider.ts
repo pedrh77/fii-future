@@ -36,12 +36,23 @@ export class BrapiMarketProvider implements MarketProvider {
   async getAssets() {
     return cache.remember('market:assets', TEN_MINUTES, async () => {
       if (this.hasToken) {
-        const data = await this.request<{ fiis: BrapiFii[] }>('/list?limit=2000&sortBy=totalInvestors&sortOrder=desc');
-        return data.fiis.map((item) => this.normalize(item));
+        const [data, publicFunds] = await Promise.all([
+          this.request<{ fiis: BrapiFii[] }>('/list?limit=5000&sortBy=totalInvestors&sortOrder=desc'),
+          this.publicFunds(),
+        ]);
+        const completeFiis = data.fiis.map((item) => ({ ...this.normalize(item), assetType: 'fii' }));
+        const merged = new Map<string, MarketAsset>(completeFiis.map((item) => [item.ticker, item]));
+        for (const item of publicFunds) merged.set(item.ticker, { ...(merged.get(item.ticker) ?? {}), ...item });
+        return [...merged.values()];
       }
-      const { data } = await axios.get<{ stocks: PublicFund[] }>('https://brapi.dev/api/quote/list?type=fund&limit=2000', { timeout: 20_000 });
-      const supportedFundTypes = new Set(['fii', 'fi-agro', 'fi-infra', 'fip', 'fidc']);
-      return data.stocks.filter((item) => supportedFundTypes.has(item.subType ?? '')).map((item) => ({
+      return this.publicFunds();
+    });
+  }
+
+  private async publicFunds(): Promise<MarketAsset[]> {
+    const { data } = await axios.get<{ stocks: PublicFund[] }>('https://brapi.dev/api/quote/list?type=fund&limit=5000', { timeout: 20_000 });
+    const supportedFundTypes = new Set(['fii', 'fi-agro', 'fi-infra', 'fip', 'fidc']);
+    return data.stocks.filter((item) => supportedFundTypes.has(item.subType ?? '')).map((item) => ({
         ticker: item.stock,
         name: item.name,
         segment: item.subsector,
@@ -50,7 +61,6 @@ export class BrapiMarketProvider implements MarketProvider {
         changeDay: item.change,
         liquidity: item.close && item.volume ? item.close * item.volume : undefined,
       }));
-    });
   }
 
   async getAsset(ticker: string) {

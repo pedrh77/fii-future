@@ -16,7 +16,7 @@ const supportedFundTypes = new Set(['fii', 'fi-agro', 'fi-infra', 'fip', 'fidc']
 let publicCatalogRequest: Promise<Fii[]> | undefined;
 
 function publicCatalog() {
-  publicCatalogRequest ??= fetch('https://brapi.dev/api/quote/list?type=fund&limit=2000')
+  publicCatalogRequest ??= fetch('https://brapi.dev/api/quote/list?type=fund&limit=5000')
     .then((response) => {
       if (!response.ok) throw new Error('Catálogo público indisponível.');
       return response.json() as Promise<{ stocks: PublicFund[] }>;
