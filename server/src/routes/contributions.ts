@@ -9,7 +9,7 @@ export function createContributionRouter(cvm: CvmProvider, market: MarketProvide
   const router = Router();
   router.post('/', async (request, response, next) => {
     try {
-      const { amount, count, tickers } = z.object({ amount: z.number().positive(), count: z.union([z.literal(3), z.literal(5), z.literal(10)]), tickers: z.array(z.string()).max(10).optional() }).parse(request.body);
+      const { amount, count, tickers } = z.object({ amount: z.number().positive(), count: z.union([z.literal(3), z.literal(5), z.literal(10)]), tickers: z.array(z.string()).max(30).optional() }).parse(request.body);
       const service = new FiiService(cvm, market);
       const ranking = tickers?.length
         ? (await Promise.all(tickers.map((ticker) => service.detail(ticker)))).filter((item) => item !== null).sort((a, b) => (b.score ?? 0) - (a.score ?? 0))

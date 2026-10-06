@@ -5,8 +5,10 @@ export interface MarketAsset {
   name?: string;
   cnpj?: string;
   segment?: string;
+  assetType?: string;
   price?: number;
   liquidity?: number;
+  changeDay?: number;
 }
 
 export interface MarketProvider {

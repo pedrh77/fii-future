@@ -51,11 +51,16 @@ export function createSimulationRouter(cvm: CvmProvider, market: MarketProvider)
 
   router.post('/portfolio', async (request, response, next) => {
     try {
-      const body = z.object({ initialAmount: z.number().min(0), monthlyContribution: z.number().min(0), years: z.number().int().min(1).max(60), tickers: z.array(z.string()).min(1).max(10), reinvestDividends: z.boolean().default(true) }).parse(request.body);
+      const body = z.object({ initialAmount: z.number().min(0), monthlyContribution: z.number().min(0), years: z.number().int().min(1).max(60), tickers: z.array(z.string()).min(1).max(30), weights: z.array(z.number().min(0)).optional(), annualDividendYield: z.number().min(0).max(100).optional(), annualAppreciation: z.number().min(-100).max(100).optional(), reinvestDividends: z.boolean().default(true) }).parse(request.body);
       const values = await Promise.all(body.tickers.map((ticker) => assumptions(cvm, market, ticker.toUpperCase())));
+      const suppliedWeights = body.weights?.length === values.length ? body.weights : undefined;
+      const weightTotal = suppliedWeights?.reduce((sum, value) => sum + value, 0) ?? 0;
+      const weightedAverage = (select: (value: typeof values[number]) => number) => weightTotal > 0
+        ? values.reduce((sum, value, index) => sum + select(value) * (suppliedWeights![index] ?? 0), 0) / weightTotal
+        : average(values.map(select));
       const calculated = {
-        annualDividendYield: average(values.map((item) => item.annualDividendYield)),
-        annualAppreciation: average(values.map((item) => item.annualAppreciation)),
+        annualDividendYield: weightedAverage((item) => item.annualDividendYield > 0 ? item.annualDividendYield : (body.annualDividendYield ?? 0)),
+        annualAppreciation: weightedAverage((item) => item.annualAppreciation || (body.annualAppreciation ?? 0)),
       };
       response.json({ ...simulateInvestment({ ...body, ...calculated }), assumptions: calculated });
     } catch (error) { next(error); }

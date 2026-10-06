@@ -17,8 +17,9 @@ dotenv.config({ path: resolve(process.cwd(), '..', '.env') });
 const app = express();
 const cvm = new CvmProvider();
 const market = new BrapiMarketProvider();
+const allowedOrigins = [process.env.FRONTEND_URL, 'http://localhost:5173', 'https://pedrh77.github.io'].filter((origin): origin is string => Boolean(origin));
 
-app.use(cors({ origin: process.env.FRONTEND_URL ?? 'http://localhost:5173' }));
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 app.get('/api/health', (_request, response) => response.json({ status: 'ok' }));
 app.use('/api/fiis', createFiiRouter(cvm, market));

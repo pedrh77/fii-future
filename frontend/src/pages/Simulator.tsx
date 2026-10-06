@@ -4,6 +4,7 @@ import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, T
 import { ErrorState } from '../components/States';
 import { useAsync } from '../hooks/useAsync';
 import { api } from '../services/api';
+import { loadPortfolio } from '../services/portfolio';
 import type { Allocation, SimulationInput, SimulationResult } from '../types';
 import { money, percent } from '../utils/format';
 
@@ -11,9 +12,11 @@ const initialInput: SimulationInput = { initialAmount: 10000, monthlyContributio
 
 export function Simulator() {
   const { data: fiis = [] } = useAsync(api.getFiis, []);
+  const positions = useMemo(loadPortfolio, []);
+  const portfolioTickers = positions.map((position) => position.ticker);
   const [input, setInput] = useState(initialInput);
   const [result, setResult] = useState<SimulationResult>();
-  const [selectedTicker, setSelectedTicker] = useState('');
+  const [dataSource, setDataSource] = useState('');
   const [error, setError] = useState('');
   const [running, setRunning] = useState(false);
   const [incomeGoal, setIncomeGoal] = useState(2000);
@@ -22,18 +25,40 @@ export function Simulator() {
   const [allocations, setAllocations] = useState<Allocation[]>([]);
   const requiredPortfolio = input.annualDividendYield > 0 ? incomeGoal * 12 / (input.annualDividendYield / 100) : 0;
 
+  const calculate = async (source: string, currentInput: SimulationInput) => {
+    if (source === '__portfolio__') {
+      if (!portfolioTickers.length) throw new Error('Adicione FIIs à carteira antes de simular.');
+      const analyzed = await api.analyzePortfolio(portfolioTickers);
+      const values = positions.map((position) => position.quantity * (analyzed.find((fii) => fii.ticker === position.ticker)?.price ?? 0));
+      const totalValue = values.reduce((sum, value) => sum + value, 0);
+      const weights = totalValue > 0 ? values : positions.map(() => 1);
+      const weightTotal = weights.reduce((sum, value) => sum + value, 0);
+      const annualDividendYield = positions.reduce((sum, position, index) => sum + (analyzed.find((fii) => fii.ticker === position.ticker)?.dividendYield12m ?? currentInput.annualDividendYield) * (weights[index] ?? 0), 0) / Math.max(weightTotal, 1);
+      const simulationInput = { ...currentInput, initialAmount: totalValue > 0 ? totalValue : currentInput.initialAmount };
+      const portfolioResult = await api.simulatePortfolio({ ...simulationInput, tickers: portfolioTickers, weights, annualDividendYield, annualAppreciation: currentInput.annualAppreciation });
+      if (portfolioResult.assumptions) setInput({ ...simulationInput, ...portfolioResult.assumptions });
+      else setInput(simulationInput);
+      return portfolioResult;
+    }
+    if (source) return api.simulateFii(source, currentInput);
+    return api.simulate(currentInput);
+  };
+
   const run = async (event?: FormEvent) => {
     event?.preventDefault(); setRunning(true); setError('');
-    try { setResult(await api.simulate(input)); } catch (reason) { setError((reason as Error).message); } finally { setRunning(false); }
+    try {
+      const next = await calculate(dataSource, input);
+      if (next.assumptions) setInput((current) => ({ ...current, ...next.assumptions }));
+      setResult(next);
+    } catch (reason) { setError((reason as Error).message); } finally { setRunning(false); }
   };
   useEffect(() => { void run(); }, []);
 
-  const useFiiData = async (ticker: string) => {
-    setSelectedTicker(ticker);
-    if (!ticker) return;
+  const useDataSource = async (source: string) => {
+    setDataSource(source);
     setRunning(true); setError('');
     try {
-      const historical = await api.simulateFii(ticker, input);
+      const historical = await calculate(source, input);
       if (historical.assumptions) setInput((current) => ({ ...current, ...historical.assumptions }));
       setResult(historical);
     } catch (reason) { setError((reason as Error).message); } finally { setRunning(false); }
@@ -42,19 +67,19 @@ export function Simulator() {
   const allocate = async () => {
     setError('');
     try {
-      const saved = JSON.parse(localStorage.getItem('fii-future-portfolio') ?? '[]') as string[];
-      setAllocations(await api.allocate(allocationAmount, allocationCount, saved));
+      setAllocations(await api.allocate(allocationAmount, allocationCount, portfolioTickers));
     } catch (reason) { setError((reason as Error).message); }
   };
 
   return <div className="page"><div className="page-heading"><div><span className="eyebrow"><Calculator size={14}/> Planejamento patrimonial</span><h1>Simulador de futuro</h1><p>Transforme premissas em uma visão clara da evolução do seu patrimônio.</p></div></div>
     {error && <ErrorState message={error} />}
     <section className="simulator-grid"><form className="panel simulator-form" onSubmit={run}><div className="panel-head"><div><span className="kicker">PREMISSAS</span><h2>Seu plano</h2></div><RefreshCcw size={18}/></div>
-      <label className="full"><span>Usar histórico de um FII</span><select value={selectedTicker} onChange={(event) => void useFiiData(event.target.value)}><option value="">Premissas manuais</option>{fiis.map((fii) => <option key={fii.ticker} value={fii.ticker}>{fii.ticker} · {fii.name}</option>)}</select></label>
+      <label className="full"><span>Base da projeção</span><select value={dataSource} onChange={(event) => void useDataSource(event.target.value)}><option value="">Premissas manuais</option><option value="__portfolio__" disabled={!portfolioTickers.length}>Minha carteira ({portfolioTickers.length} FIIs)</option>{fiis.map((fii) => <option key={fii.ticker} value={fii.ticker}>{fii.ticker} · {fii.name}</option>)}</select></label>
+      {dataSource === '__portfolio__' && <div className="portfolio-source"><b>Carteira analisada</b><div>{portfolioTickers.map((ticker) => <span key={ticker}>{ticker}</span>)}</div><p>Sistema usa todos os fundos, posição atual, DY disponível e histórico de preços. Ativos sem quantidade recebem peso igual.</p></div>}
       <div className="form-grid"><NumberField label="Patrimônio inicial" prefix="R$" value={input.initialAmount} onChange={(value) => setInput({ ...input, initialAmount: value })}/><NumberField label="Aporte mensal" prefix="R$" value={input.monthlyContribution} onChange={(value) => setInput({ ...input, monthlyContribution: value })}/><NumberField label="Prazo" suffix="anos" value={input.years} onChange={(value) => setInput({ ...input, years: value })}/><NumberField label="Dividend Yield anual" suffix="%" value={input.annualDividendYield} step={0.1} onChange={(value) => setInput({ ...input, annualDividendYield: value })}/><NumberField label="Valorização anual" suffix="%" value={input.annualAppreciation} step={0.1} onChange={(value) => setInput({ ...input, annualAppreciation: value })}/></div>
       <label className="toggle-row"><button type="button" className={input.reinvestDividends ? 'toggle active' : 'toggle'} onClick={() => setInput({ ...input, reinvestDividends: !input.reinvestDividends })}><i/></button><span><b>Reinvestir dividendos</b><small>Potencializa o efeito dos juros compostos</small></span></label>
       <button className="primary-button wide" disabled={running}>{running ? 'Calculando...' : 'Atualizar projeção'} <TrendingUp size={17}/></button>
-      <p className="form-note"><Info size={14}/> Projeção baseada em dados históricos. Não representa garantia de resultado futuro.</p>
+      <p className="form-note"><Info size={14}/> Histórico define as premissas; aporte e prazo definem a projeção. Resultado não garante retorno futuro.</p>
     </form>
 
     <div className="results-column"><div className="result-grid"><ResultCard icon={PiggyBank} label="Patrimônio final" value={money(result?.finalPortfolioValue)} primary/><ResultCard icon={WalletCards} label="Total investido" value={money(result?.totalInvested)}/><ResultCard icon={CircleDollarSign} label="Dividendos acumulados" value={money(result?.totalDividends)} positive/><ResultCard icon={TrendingUp} label="Renda mensal estimada" value={money(result?.estimatedMonthlyIncome)} positive/></div>

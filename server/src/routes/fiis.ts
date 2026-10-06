@@ -15,6 +15,14 @@ export function createFiiRouter(cvm: CvmProvider, market: MarketProvider) {
     try { response.json(await service.list()); } catch (error) { next(error); }
   });
 
+  router.get('/performance', async (request, response, next) => {
+    try {
+      const period = String(request.query.period ?? 'day');
+      if (!['day', 'week', 'month'].includes(period)) return response.status(400).json({ message: 'Período inválido.' });
+      response.json(await service.performance(period as 'day' | 'week' | 'month'));
+    } catch (error) { next(error); }
+  });
+
   router.get('/:ticker/dividends', async (request, response, next) => {
     try { response.json(await service.dividends(request.params.ticker)); } catch (error) { next(error); }
   });

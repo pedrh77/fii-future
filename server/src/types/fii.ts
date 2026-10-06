@@ -3,7 +3,9 @@ export interface Fii {
   name?: string;
   cnpj?: string;
   segment?: string;
+  assetType?: string;
   price?: number;
+  changeDay?: number;
   netWorth?: number;
   totalShares?: number;
   patrimonialValuePerShare?: number;
@@ -30,3 +32,4 @@ export interface FiiScoreDetails {
 
 export interface FiiDividend { ticker: string; date: string; value: number }
 export interface FiiPriceHistory { date: string; price: number }
+export interface FiiPerformance { ticker: string; name?: string; assetType?: string; price?: number; changePercent: number; period: 'day' | 'week' | 'month' }

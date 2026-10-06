@@ -9,7 +9,7 @@ export function createPortfolioRouter(cvm: CvmProvider, market: MarketProvider) 
   const service = new FiiService(cvm, market);
   router.post('/analyze', async (request, response, next) => {
     try {
-      const { tickers } = z.object({ tickers: z.array(z.string().regex(/^[A-Z]{4}[0-9]{2}$/)).min(1).max(10) }).parse(request.body);
+      const { tickers } = z.object({ tickers: z.array(z.string().regex(/^[A-Z]{4}[0-9]{2}$/)).min(1).max(30) }).parse(request.body);
       const results = await Promise.all(tickers.map((ticker) => service.detail(ticker)));
       response.json(results.filter(Boolean));
     } catch (error) { next(error); }

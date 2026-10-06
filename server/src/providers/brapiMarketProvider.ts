@@ -7,7 +7,7 @@ const TEN_MINUTES = 10 * 60_000;
 const ONE_HOUR = 60 * 60_000;
 const SIX_HOURS = 6 * 60 * 60_000;
 type BrapiFii = { symbol: string; name?: string; cnpj?: string; segmentoAtuacao?: string; price?: number };
-type PublicFund = { stock: string; name?: string; close?: number; volume?: number; subsector?: string; subType?: string };
+type PublicFund = { stock: string; name?: string; close?: number; change?: number; volume?: number; subsector?: string; subType?: string };
 type YahooChart = { chart: { result?: Array<{ meta: { longName?: string; regularMarketPrice?: number; regularMarketVolume?: number }; timestamp?: number[]; indicators?: { quote?: Array<{ close?: Array<number | null> }> }; events?: { dividends?: Record<string, { amount: number; date: number }> } }> } };
 
 export class BrapiMarketProvider implements MarketProvider {
@@ -40,11 +40,14 @@ export class BrapiMarketProvider implements MarketProvider {
         return data.fiis.map((item) => this.normalize(item));
       }
       const { data } = await axios.get<{ stocks: PublicFund[] }>('https://brapi.dev/api/quote/list?type=fund&limit=2000', { timeout: 20_000 });
-      return data.stocks.filter((item) => item.subType === 'fii').map((item) => ({
+      const supportedFundTypes = new Set(['fii', 'fi-agro', 'fi-infra', 'fip', 'fidc']);
+      return data.stocks.filter((item) => supportedFundTypes.has(item.subType ?? '')).map((item) => ({
         ticker: item.stock,
         name: item.name,
         segment: item.subsector,
+        assetType: item.subType,
         price: item.close,
+        changeDay: item.change,
         liquidity: item.close && item.volume ? item.close * item.volume : undefined,
       }));
     });

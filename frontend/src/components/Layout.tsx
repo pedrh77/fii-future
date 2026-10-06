@@ -1,9 +1,10 @@
-import { BarChart3, Calculator, LayoutDashboard, Menu, TrendingUp, X } from 'lucide-react';
+import { BarChart3, BriefcaseBusiness, Calculator, LayoutDashboard, Menu, TrendingUp, X } from 'lucide-react';
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 
 const links = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/carteira', label: 'Carteira', icon: BriefcaseBusiness },
   { to: '/fiis', label: 'FIIs', icon: BarChart3 },
   { to: '/simulador', label: 'Simulador', icon: Calculator },
   { to: '/ranking', label: 'Ranking', icon: TrendingUp },
