@@ -195,12 +195,12 @@ input:focus, select:focus { border-color: #4ddda877; box-shadow: 0 0 0 3px #34d3
 .portfolio-summary strong { font-family: 'DM Mono'; font-size: 20px; font-weight: 500; }
 .portfolio-summary small { color: #607186; font-size: 8px; }
 .negative { color: #fb7185 !important; }
-.portfolio-content-grid { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; align-items: start; }
-.portfolio-table-panel { overflow: hidden; }
+.portfolio-content-grid { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 18px; align-items: start; }
+.portfolio-table-panel { overflow-x: auto; scrollbar-color: #314258 #0a1624; scrollbar-width: thin; }
 .portfolio-table { min-width: 1050px; }
 .portfolio-row { display: grid; grid-template-columns: 1.3fr .5fr .75fr .75fr .8fr .8fr .8fr .55fr .75fr 62px; gap: 10px; align-items: center; min-height: 69px; padding: 0 20px; border-bottom: 1px solid #ffffff0b; font-size: 10px; }
 .portfolio-row:not(.table-header):hover { background: #ffffff04; }
-.row-actions { display: flex; justify-content: flex-end; gap: 5px; }
+.row-actions { display: flex; justify-content: flex-end; gap: 5px; position: sticky; right: 0; padding-left: 7px; background: #0b1726; box-shadow: -10px 0 16px #07111f; }
 .row-actions button { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid #26354a; border-radius: 7px; background: #0c1929; color: #8292a5; }
 .row-actions button:hover { color: #6ee7b7; border-color: #34d39940; }
 .row-actions button.danger:hover { color: #fb7185; border-color: #fb718540; }
@@ -347,6 +347,12 @@ footer { border-top: 1px solid #ffffff10; max-width: 1184px; margin: auto; paddi
 footer b { color: #8291a3; }
 footer p { margin: 0; }
 
+@media (max-width: 1280px) {
+  .portfolio-content-grid { grid-template-columns: 1fr; }
+  .portfolio-table { min-width: 980px; }
+  .allocation-chart { min-height: 340px; }
+}
+
 @media (max-width: 1000px) {
   .metric-grid { grid-template-columns: repeat(2, 1fr); }
   .detail-metrics { grid-template-columns: repeat(4, 1fr); }
@@ -479,6 +485,7 @@ footer p { margin: 0; }
   .portfolio-row:not(.table-header) > span:nth-child(8)::before { content: 'Peso'; }
   .portfolio-row:not(.table-header) > span:nth-child(9)::before { content: 'Renda/mês'; }
   .portfolio-row .row-actions { grid-column: 1 / -1; flex-direction: row !important; justify-content: flex-end; padding-top: 8px; border-top: 1px solid #ffffff0b; }
+  .portfolio-row .row-actions { position: static; padding-left: 0; background: transparent; box-shadow: none; }
   .portfolio-row .row-actions::before { display: none; }
   .row-actions button { width: 42px; height: 42px; }
   .allocation-chart { min-height: 340px; }
