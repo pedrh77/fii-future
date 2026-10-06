@@ -42,7 +42,8 @@ function publicCatalog() {
 }
 
 function staticSnapshot() {
-  staticSnapshotRequest ??= fetch(`${import.meta.env.BASE_URL}market-snapshot.json`)
+  const revision = Math.floor(Date.now() / 300_000);
+  staticSnapshotRequest ??= fetch(`${import.meta.env.BASE_URL}market-snapshot.json?v=${revision}`, { cache: 'no-store' })
     .then((response) => {
       if (!response.ok) throw new Error('Snapshot estático indisponível.');
       return response.json() as Promise<StaticSnapshot>;
