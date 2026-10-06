@@ -1,5 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import AdmZip from 'adm-zip';
+import { parse } from 'csv-parse/sync';
 
 const fundTypes = new Set(['fii', 'fi-agro', 'fi-infra', 'fip', 'fidc']);
 const historyLimit = Number(process.env.SNAPSHOT_LIMIT ?? 120);
@@ -49,14 +51,26 @@ const entries = await mapWithConcurrency(selected, 8, async (fund) => {
   }
 });
 
-const funds = Object.fromEntries(entries.filter(Boolean));
+const historicalFunds = Object.fromEntries(entries.filter(Boolean));
+const cvmFunds = await loadCvmFunds();
+const funds = Object.fromEntries(catalog.map((asset) => {
+  const root = asset.ticker.slice(0, 4);
+  const fundamentals = cvmFunds.get(root);
+  const historical = historicalFunds[asset.ticker];
+  if (!fundamentals && !historical) return null;
+  return [asset.ticker, { history: [], dividends: [], ...fundamentals, ...historical }];
+}).filter(Boolean));
 const performance = {
-  week: performanceFor('week', selected, funds),
-  month: performanceFor('month', selected, funds),
+  week: performanceFor('week', selected, historicalFunds),
+  month: performanceFor('month', selected, historicalFunds),
 };
 const snapshot = {
   generatedAt: new Date().toISOString(),
-  coverage: { catalog: catalog.length, historical: Object.keys(funds).length },
+  coverage: {
+    catalog: catalog.length,
+    historical: Object.keys(historicalFunds).length,
+    fundamentals: Object.values(funds).filter((fund) => fund.netWorth).length,
+  },
   funds,
   performance,
 };
@@ -64,7 +78,65 @@ const snapshot = {
 const outputDirectory = resolve('frontend', 'public');
 await mkdir(outputDirectory, { recursive: true });
 await writeFile(resolve(outputDirectory, 'market-snapshot.json'), JSON.stringify(snapshot));
-console.log(`Snapshot: ${catalog.length} fundos, ${Object.keys(funds).length} históricos.`);
+console.log(`Snapshot: ${catalog.length} fundos, ${Object.keys(historicalFunds).length} históricos, ${snapshot.coverage.fundamentals} com fundamentos.`);
+
+async function loadCvmFunds() {
+  const year = new Date().getFullYear();
+  const results = await Promise.all([year - 1, year].map(async (selectedYear) => {
+    const url = `https://dados.cvm.gov.br/dados/FII/DOC/INF_MENSAL/DADOS/inf_mensal_fii_${selectedYear}.zip`;
+    const response = await fetch(url, { headers });
+    if (!response.ok) return [];
+    const zip = new AdmZip(Buffer.from(await response.arrayBuffer()));
+    const read = (part) => {
+      const entry = zip.getEntries().find((item) => item.entryName.includes(part));
+      if (!entry) return [];
+      return parse(entry.getData().toString('latin1'), {
+        columns: true,
+        delimiter: ';',
+        skip_empty_lines: true,
+        relax_column_count: true,
+      });
+    };
+    const complements = new Map(read('_complemento_').map((row) => [`${cleanCnpj(row.CNPJ_Fundo_Classe)}:${row.Data_Referencia}:${row.Versao}`, row]));
+    return read('_geral_').flatMap((row) => {
+      const root = row.Codigo_ISIN?.match(/^BR([A-Z0-9]{4})/)?.[1];
+      const complement = complements.get(`${cleanCnpj(row.CNPJ_Fundo_Classe)}:${row.Data_Referencia}:${row.Versao}`);
+      if (!root || !complement) return [];
+      const totalShares = numberValue(complement.Cotas_Emitidas) ?? numberValue(row.Quantidade_Cotas_Emitidas);
+      const netWorth = numberValue(complement.Patrimonio_Liquido);
+      const reportedValue = numberValue(complement.Valor_Patrimonial_Cotas);
+      return [{
+        root,
+        referenceDate: row.Data_Referencia,
+        version: Number(row.Versao) || 0,
+        data: {
+          cnpj: cleanCnpj(row.CNPJ_Fundo_Classe),
+          referenceDate: row.Data_Referencia,
+          name: row.Nome_Fundo_Classe || undefined,
+          segment: row.Segmento_Atuacao || undefined,
+          netWorth,
+          totalShares,
+          patrimonialValuePerShare: reportedValue ?? (netWorth && totalShares ? netWorth / totalShares : undefined),
+          shareholders: numberValue(complement.Total_Numero_Cotistas),
+        },
+      }];
+    });
+  }));
+  const latest = new Map();
+  for (const item of results.flat()) {
+    const current = latest.get(item.root);
+    if (!current || item.referenceDate > current.referenceDate || (item.referenceDate === current.referenceDate && item.version > current.version)) latest.set(item.root, item);
+  }
+  if (!latest.size) throw new Error('Fundamentos CVM indisponíveis. Snapshot anterior deve permanecer publicado.');
+  return new Map([...latest].map(([root, item]) => [root, item.data]));
+}
+
+function cleanCnpj(value = '') { return value.replace(/\D/g, ''); }
+function numberValue(value) {
+  if (!value) return undefined;
+  const parsed = Number(String(value).replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
 
 function performanceFor(period, assets, staticFunds) {
   return assets.flatMap((asset) => {

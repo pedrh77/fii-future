@@ -13,8 +13,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 type PublicFund = { stock: string; name?: string; close?: number; change?: number; volume?: number; subsector?: string; subType?: string };
-type StaticFund = { history: FiiPriceHistory[]; dividends: FiiDividend[]; annualDividendYield?: number; annualAppreciation?: number };
-type StaticSnapshot = { generatedAt: string; coverage: { catalog: number; historical: number }; funds: Record<string, StaticFund>; performance: { week: FiiPerformance[]; month: FiiPerformance[] } };
+type StaticFund = {
+  history: FiiPriceHistory[]; dividends: FiiDividend[]; annualDividendYield?: number; annualAppreciation?: number;
+  cnpj?: string; referenceDate?: string; name?: string; segment?: string; netWorth?: number; totalShares?: number;
+  patrimonialValuePerShare?: number; shareholders?: number;
+};
+type StaticSnapshot = { generatedAt: string; coverage: { catalog: number; historical: number; fundamentals?: number }; funds: Record<string, StaticFund>; performance: { week: FiiPerformance[]; month: FiiPerformance[] } };
 const supportedFundTypes = new Set(['fii', 'fi-agro', 'fi-infra', 'fip', 'fidc']);
 let publicCatalogRequest: Promise<Fii[]> | undefined;
 let staticSnapshotRequest: Promise<StaticSnapshot> | undefined;
@@ -59,6 +63,8 @@ const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max,
 
 function enrichStatic(base: Fii, stored?: StaticFund): Fii {
   if (!stored) return base;
+  const patrimonialValuePerShare = stored.patrimonialValuePerShare ?? (stored.netWorth && stored.totalShares ? stored.netWorth / stored.totalShares : undefined);
+  const pvp = base.price && patrimonialValuePerShare ? Math.round(base.price / patrimonialValuePerShare * 100) / 100 : undefined;
   const values = stored.dividends.map((item) => item.value);
   const returns = stored.history.slice(-91).flatMap((item, index, history) => index && history[index - 1].price > 0
     ? [(item.price / history[index - 1].price - 1) * 100]
@@ -66,20 +72,32 @@ function enrichStatic(base: Fii, stored?: StaticFund): Fii {
   const meanReturn = returns.length ? returns.reduce((sum, value) => sum + value, 0) / returns.length : 0;
   const volatility = returns.length ? Math.sqrt(returns.reduce((sum, value) => sum + (value - meanReturn) ** 2, 0) / returns.length) : 4;
   const dividends = clamp(((stored.annualDividendYield ?? 0) - 4) / 12 * 100);
-  const valuation = clamp(((stored.annualAppreciation ?? -15) + 15) / 30 * 100);
+  const valuation = pvp === undefined
+    ? clamp(((stored.annualAppreciation ?? -15) + 15) / 30 * 100)
+    : clamp(100 - Math.abs(pvp - .9) * 100);
   const liquidity = clamp(((Math.log10(Math.max(base.liquidity ?? 1, 1)) - 4) / 3) * 100);
   const consistency = clamp(100 - volatility * 25);
-  const quality = clamp((dividends + valuation + liquidity + consistency) / 4);
-  const score = dividends * .35 + valuation * .25 + consistency * .2 + liquidity * .2;
+  const netWorth = stored.netWorth === undefined ? 45 : clamp((Math.log10(Math.max(stored.netWorth, 1)) - 6) * 30);
+  const shareholders = stored.shareholders === undefined ? 45 : clamp(Math.log10(Math.max(stored.shareholders, 1)) / 6 * 100);
+  const quality = netWorth * (2 / 3) + shareholders * (1 / 3);
+  const score = dividends * .3 + valuation * .25 + consistency * .2 + netWorth * .1 + shareholders * .05 + liquidity * .1;
   return {
     ...base,
+    cnpj: stored.cnpj,
+    name: stored.name ?? base.name,
+    segment: stored.segment ?? base.segment,
+    netWorth: stored.netWorth,
+    totalShares: stored.totalShares,
+    patrimonialValuePerShare,
+    pvp,
+    shareholders: stored.shareholders,
     dividendYield12m: stored.annualDividendYield,
     annualAppreciation: stored.annualAppreciation,
     lastDividend: values[0],
     averageDividend6m: values.length ? values.slice(0, 6).reduce((sum, value) => sum + value, 0) / Math.min(values.length, 6) : undefined,
     averageDividend12m: values.length ? values.slice(0, 12).reduce((sum, value) => sum + value, 0) / Math.min(values.length, 12) : undefined,
     score: Math.round(score * 10) / 10,
-    scoreDetails: { dividends, valuation, liquidity, consistency, quality, netWorth: 50, shareholders: 50 },
+    scoreDetails: { dividends, valuation, liquidity, consistency, quality, netWorth, shareholders },
   };
 }
 
