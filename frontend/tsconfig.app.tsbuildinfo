@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/components/layout.tsx","./src/components/scorebadge.tsx","./src/components/states.tsx","./src/hooks/useasync.ts","./src/pages/dashboard.tsx","./src/pages/fiidetail.tsx","./src/pages/ranking.tsx","./src/pages/simulator.tsx","./src/services/api.ts","./src/types/index.ts","./src/utils/format.ts"],"version":"5.7.3"}
