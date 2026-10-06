@@ -157,7 +157,7 @@ export const api = {
     const result = simulateLocally({ initialAmount: input.initialAmount, monthlyContribution: input.monthlyContribution, years: input.years, annualDividendYield: input.annualDividendYield, annualAppreciation: input.annualAppreciation, reinvestDividends: input.reinvestDividends ?? true });
     return { ...result, assumptions: { annualDividendYield: input.annualDividendYield, annualAppreciation: input.annualAppreciation } };
   }),
-  allocate: async (amount: number, count: 3 | 5 | 10, positions: PortfolioPosition[]) => {
+  allocate: async (amount: number, count: 1 | 3 | 5 | 10, positions: PortfolioPosition[]) => {
     const tickers = positions.map((position) => position.ticker);
     return request<Allocation[]>('/contributions', { method: 'POST', body: JSON.stringify({ amount, count, tickers, positions }) }).catch(async () => {
       const selected = (await analyzeStatically(tickers)).filter((item) => (item.price ?? 0) > 0 && (item.score ?? 0) > 0).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, count);

@@ -11,7 +11,7 @@ export function createContributionRouter(cvm: CvmProvider, market: MarketProvide
     try {
       const { amount, count, tickers, positions } = z.object({
         amount: z.number().positive(),
-        count: z.union([z.literal(3), z.literal(5), z.literal(10)]),
+        count: z.union([z.literal(1), z.literal(3), z.literal(5), z.literal(10)]),
         tickers: z.array(z.string()).max(30).optional(),
         positions: z.array(z.object({ ticker: z.string(), quantity: z.number().nonnegative() })).max(30).optional(),
       }).parse(request.body);
