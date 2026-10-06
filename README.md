@@ -5,14 +5,12 @@ Dashboard educacional para consultar fundos imobiliários brasileiros, comparar 
 ## Arquitetura
 
 ```text
-React + TypeScript + Vite
-          ↓ /api
-Node.js + Express + TypeScript
-          ↓
-Providers CVM + mercado
+GitHub Actions → snapshot diário JSON → GitHub Pages
+                                        ↓
+                                React + TypeScript
 ```
 
-Projeto sem banco de dados e sem autenticação. Servidor protege token, normaliza respostas, mantém cache em memória e executa cálculos. Frontend nunca acessa API externa diretamente.
+Produção funciona sem backend. GitHub Actions gera um retrato diário do mercado e publica tudo como arquivos estáticos. Navegador consulta o catálogo público BRAPI para cotações atuais e usa o snapshot para histórico, dividendos, ranking semanal/mensal e premissas de simulação. API Node continua disponível somente para desenvolvimento avançado e integração opcional com CVM e BRAPI Pro.
 
 ## Stack
 
@@ -55,6 +53,7 @@ npm run dev
 Build e testes:
 
 ```bash
+npm run snapshot
 npm run build
 npm test
 ```
@@ -113,6 +112,8 @@ Nota de 0 a 100:
 
 Indicadores ausentes recebem nota neutra/conservadora. Consistência considera até 12 pagamentos, média, desvio e regularidade. Score serve somente como classificação interna.
 
+No GitHub Pages, score estático cobre fundos presentes no snapshot. Pondera DY, valorização anual, volatilidade recente e liquidez. Backend opcional amplia a nota com P/VP, patrimônio, cotistas e dados CVM.
+
 ## Simulação
 
 Simulação ocorre mês a mês. Cada período aplica aporte, valorização e dividendos. Dividendos entram novamente no patrimônio somente quando reinvestimento está ativo. Resultado mostra patrimônio, total aportado, dividendos, renda mensal estimada e pontos anuais.
@@ -121,11 +122,11 @@ Simulação por FII usa DY calculado pelo total dos últimos 12 rendimentos divi
 
 ## GitHub Pages
 
-Workflow `.github/workflows/pages.yml` publica o frontend após cada push em `main`. Rotas usam hash, portanto links internos funcionam no GitHub Pages sem regra de rewrite.
+Workflow `.github/workflows/pages.yml` gera o snapshot e publica o frontend após cada push em `main`. Também atualiza os dados às 18h15, de segunda a sexta, no horário de Brasília. Rotas usam hash, portanto links internos funcionam no GitHub Pages sem regra de rewrite.
 
 1. Em **Settings > Pages**, selecione **GitHub Actions** como fonte.
-2. Opcional: crie variável de repositório `VITE_API_URL` com origem pública do backend, sem `/api` no final. Exemplo: `https://api.exemplo.com`.
-3. Sem backend público, catálogo, carteira básica e simulação manual usam fallback estático no navegador. Histórico, CVM, ranking semanal/mensal e premissas completas exigem API Node online.
+2. Publique a branch `main`. Nenhum servidor, token ou variável de ambiente é necessário.
+3. Snapshot cobre histórico e rendimentos dos 120 fundos mais líquidos. Catálogo público inclui mais de 400 fundos negociados.
 
 URL esperada: `https://pedrh77.github.io/fii-future/`.
 
@@ -134,6 +135,7 @@ URL esperada: `https://pedrh77.github.io/fii-future/`.
 - CVM publica informes em lote e pode ter atraso, reapresentações ou campos vazios.
 - CNPJ do provider de mercado faz vínculo entre ticker e informe CVM.
 - Liquidez pode ficar ausente quando fonte gratuita não fornece volume normalizado.
+- Snapshot histórico cobre até 120 fundos líquidos. Fundos fora da cobertura continuam disponíveis no catálogo, mas podem usar premissas conservadoras na simulação.
 - Sem token BRAPI Pro, universo público mostra mais de 400 fundos negociados com cotação. Fundos apenas cadastrados, inativos ou sem cotação pública podem não aparecer; ainda podem ser digitados manualmente na carteira.
 - Correspondência sem token usa nome do fundo. Renomes recentes podem deixar algum FII com dados parciais.
 - Score e projeções não são recomendação e não garantem resultado.

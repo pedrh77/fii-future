@@ -3,6 +3,8 @@ name: Publicar GitHub Pages
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: '15 21 * * 1-5'
   workflow_dispatch:
 
 permissions:
@@ -24,9 +26,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: npm run snapshot
       - run: npm run build -w frontend
-        env:
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

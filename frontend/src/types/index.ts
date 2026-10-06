@@ -3,7 +3,7 @@ export interface Fii {
   ticker: string; name?: string; cnpj?: string; segment?: string; assetType?: string; price?: number; changeDay?: number; netWorth?: number; totalShares?: number;
   patrimonialValuePerShare?: number; pvp?: number; dividendYield12m?: number; lastDividend?: number;
   averageDividend6m?: number; averageDividend12m?: number; shareholders?: number; liquidity?: number;
-  score?: number; scoreDetails?: ScoreDetails;
+  annualAppreciation?: number; score?: number; scoreDetails?: ScoreDetails;
 }
 export interface FiiDividend { ticker: string; date: string; value: number }
 export interface FiiPriceHistory { date: string; price: number }

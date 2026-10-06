@@ -37,9 +37,10 @@ export function Simulator() {
       const totalValue = values.reduce((sum, value) => sum + value, 0);
       const weights = totalValue > 0 ? values : positions.map(() => 1);
       const weightTotal = weights.reduce((sum, value) => sum + value, 0);
-      const annualDividendYield = positions.reduce((sum, position, index) => sum + (analyzed.find((fii) => fii.ticker === position.ticker)?.dividendYield12m ?? currentInput.annualDividendYield) * (weights[index] ?? 0), 0) / Math.max(weightTotal, 1);
+      const annualDividendYield = roundOne(positions.reduce((sum, position, index) => sum + (analyzed.find((fii) => fii.ticker === position.ticker)?.dividendYield12m ?? currentInput.annualDividendYield) * (weights[index] ?? 0), 0) / Math.max(weightTotal, 1));
+      const annualAppreciation = roundOne(positions.reduce((sum, position, index) => sum + (analyzed.find((fii) => fii.ticker === position.ticker)?.annualAppreciation ?? currentInput.annualAppreciation) * (weights[index] ?? 0), 0) / Math.max(weightTotal, 1));
       const simulationInput = { ...currentInput, initialAmount: totalValue > 0 ? totalValue : currentInput.initialAmount };
-      const portfolioResult = await api.simulatePortfolio({ ...simulationInput, tickers: portfolioTickers, weights, annualDividendYield, annualAppreciation: currentInput.annualAppreciation });
+      const portfolioResult = await api.simulatePortfolio({ ...simulationInput, tickers: portfolioTickers, weights, annualDividendYield, annualAppreciation });
       if (portfolioResult.assumptions) setInput({ ...simulationInput, ...portfolioResult.assumptions });
       else setInput(simulationInput);
       return portfolioResult;

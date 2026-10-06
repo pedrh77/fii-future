@@ -16,7 +16,7 @@ export function Layout() {
     <header className="topbar">
       <NavLink to="/" className="brand"><span className="brand-mark"><TrendingUp size={20} /></span><span>FII <b>Future</b></span></NavLink>
       <nav className={open ? 'nav open' : 'nav'}>{links.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} end={to === '/'} onClick={() => setOpen(false)}><Icon size={17} />{label}</NavLink>)}</nav>
-      <div className="market-status"><i /> CVM + mercado</div>
+      <div className="market-status"><i /> mercado + histórico</div>
       <button className="menu-button" onClick={() => setOpen(!open)} aria-label="Abrir menu">{open ? <X /> : <Menu />}</button>
     </header>
     <main><Outlet /></main>

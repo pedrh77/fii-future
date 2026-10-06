@@ -3,6 +3,7 @@ import type { Allocation, Fii, FiiDividend, FiiPerformance, FiiPriceHistory, Sim
 const apiOrigin = String(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  if (!apiOrigin) throw new Error('Modo estático ativo.');
   const response = await fetch(`${apiOrigin}/api${path}`, { headers: { 'Content-Type': 'application/json' }, ...options });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
@@ -12,8 +13,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 type PublicFund = { stock: string; name?: string; close?: number; change?: number; volume?: number; subsector?: string; subType?: string };
+type StaticFund = { history: FiiPriceHistory[]; dividends: FiiDividend[]; annualDividendYield?: number; annualAppreciation?: number };
+type StaticSnapshot = { generatedAt: string; coverage: { catalog: number; historical: number }; funds: Record<string, StaticFund>; performance: { week: FiiPerformance[]; month: FiiPerformance[] } };
 const supportedFundTypes = new Set(['fii', 'fi-agro', 'fi-infra', 'fip', 'fidc']);
 let publicCatalogRequest: Promise<Fii[]> | undefined;
+let staticSnapshotRequest: Promise<StaticSnapshot> | undefined;
 
 function publicCatalog() {
   publicCatalogRequest ??= fetch('https://brapi.dev/api/quote/list?type=fund&limit=5000')
@@ -31,6 +35,60 @@ function publicCatalog() {
       liquidity: item.close && item.volume ? item.close * item.volume : undefined,
     })));
   return publicCatalogRequest;
+}
+
+function staticSnapshot() {
+  staticSnapshotRequest ??= fetch(`${import.meta.env.BASE_URL}market-snapshot.json`)
+    .then((response) => {
+      if (!response.ok) throw new Error('Snapshot estático indisponível.');
+      return response.json() as Promise<StaticSnapshot>;
+    });
+  return staticSnapshotRequest;
+}
+
+async function staticFii(ticker: string) {
+  const normalized = ticker.toUpperCase();
+  const [catalog, snapshot] = await Promise.all([publicCatalog(), staticSnapshot()]);
+  const base = catalog.find((item) => item.ticker === normalized);
+  const stored = snapshot.funds[normalized];
+  if (!/^[A-Z]{4}[0-9]{2}$/.test(normalized)) throw new Error('Ticker inválido.');
+  return enrichStatic(base ?? { ticker: normalized, name: 'Ticker cadastrado manualmente' }, stored);
+}
+
+const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value));
+
+function enrichStatic(base: Fii, stored?: StaticFund): Fii {
+  if (!stored) return base;
+  const values = stored.dividends.map((item) => item.value);
+  const returns = stored.history.slice(-91).flatMap((item, index, history) => index && history[index - 1].price > 0
+    ? [(item.price / history[index - 1].price - 1) * 100]
+    : []);
+  const meanReturn = returns.length ? returns.reduce((sum, value) => sum + value, 0) / returns.length : 0;
+  const volatility = returns.length ? Math.sqrt(returns.reduce((sum, value) => sum + (value - meanReturn) ** 2, 0) / returns.length) : 4;
+  const dividends = clamp(((stored.annualDividendYield ?? 0) - 4) / 12 * 100);
+  const valuation = clamp(((stored.annualAppreciation ?? -15) + 15) / 30 * 100);
+  const liquidity = clamp(((Math.log10(Math.max(base.liquidity ?? 1, 1)) - 4) / 3) * 100);
+  const consistency = clamp(100 - volatility * 25);
+  const quality = clamp((dividends + valuation + liquidity + consistency) / 4);
+  const score = dividends * .35 + valuation * .25 + consistency * .2 + liquidity * .2;
+  return {
+    ...base,
+    dividendYield12m: stored.annualDividendYield,
+    annualAppreciation: stored.annualAppreciation,
+    lastDividend: values[0],
+    averageDividend6m: values.length ? values.slice(0, 6).reduce((sum, value) => sum + value, 0) / Math.min(values.length, 6) : undefined,
+    averageDividend12m: values.length ? values.slice(0, 12).reduce((sum, value) => sum + value, 0) / Math.min(values.length, 12) : undefined,
+    score: Math.round(score * 10) / 10,
+    scoreDetails: { dividends, valuation, liquidity, consistency, quality, netWorth: 50, shareholders: 50 },
+  };
+}
+
+async function analyzeStatically(tickers: string[]) {
+  const [catalog, snapshot] = await Promise.all([publicCatalog(), staticSnapshot()]);
+  const byTicker = new Map(catalog.map((item) => [item.ticker, item]));
+  return [...new Set(tickers.map((ticker) => ticker.toUpperCase()))]
+    .filter((ticker) => /^[A-Z]{4}[0-9]{2}$/.test(ticker))
+    .map((ticker) => enrichStatic(byTicker.get(ticker) ?? { ticker, name: 'Ticker cadastrado manualmente' }, snapshot.funds[ticker]));
 }
 
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
@@ -57,26 +115,35 @@ function simulateLocally(input: SimulationInput): SimulationResult {
 
 export const api = {
   getFiis: async () => request<Fii[]>('/fiis').catch(publicCatalog),
-  getRanking: () => request<Fii[]>('/ranking'),
-  getFii: async (ticker: string) => request<Fii>(`/fiis/${ticker}`).catch(async () => {
-    const fii = (await publicCatalog()).find((item) => item.ticker === ticker.toUpperCase());
-    if (!fii) throw new Error('FII não encontrado.');
-    return fii;
+  getRanking: () => request<Fii[]>('/ranking').catch(publicCatalog),
+  getFii: async (ticker: string) => request<Fii>(`/fiis/${ticker}`).catch(() => staticFii(ticker)),
+  getDividends: (ticker: string) => request<FiiDividend[]>(`/fiis/${ticker}/dividends`).catch(async () => (await staticSnapshot()).funds[ticker.toUpperCase()]?.dividends ?? []),
+  getHistory: (ticker: string, period = '1y') => request<FiiPriceHistory[]>(`/fiis/${ticker}/history?period=${period}`).catch(async () => {
+    const history = (await staticSnapshot()).funds[ticker.toUpperCase()]?.history ?? [];
+    const days: Record<string, number> = { '1m': 31, '6m': 183, '1y': 366, '5y': 1827 };
+    const cutoff = Date.now() - (days[period] ?? 366) * 86_400_000;
+    return history.filter((item) => new Date(item.date).getTime() >= cutoff);
   }),
-  getDividends: (ticker: string) => request<FiiDividend[]>(`/fiis/${ticker}/dividends`),
-  getHistory: (ticker: string, period = '1y') => request<FiiPriceHistory[]>(`/fiis/${ticker}/history?period=${period}`),
   getPerformance: async (period: 'day' | 'week' | 'month') => request<FiiPerformance[]>(`/fiis/performance?period=${period}`).catch(async () => period === 'day'
     ? (await publicCatalog()).filter((item) => item.changeDay !== undefined && (item.liquidity ?? 0) >= 100_000).sort((a, b) => (b.changeDay ?? 0) - (a.changeDay ?? 0)).slice(0, 5).map((item) => ({ ticker: item.ticker, name: item.name, assetType: item.assetType, price: item.price, changePercent: item.changeDay!, period }))
-    : []),
+    : (await staticSnapshot()).performance[period]),
   simulate: async (input: SimulationInput) => request<SimulationResult>('/simulation', { method: 'POST', body: JSON.stringify(input) }).catch(() => simulateLocally(input)),
-  simulateFii: (ticker: string, input: Pick<SimulationInput, 'initialAmount' | 'monthlyContribution' | 'years' | 'reinvestDividends'>) => request<SimulationResult>(`/simulation/fii/${ticker}`, { method: 'POST', body: JSON.stringify(input) }),
+  simulateFii: async (ticker: string, input: Pick<SimulationInput, 'initialAmount' | 'monthlyContribution' | 'years' | 'reinvestDividends'>) => request<SimulationResult>(`/simulation/fii/${ticker}`, { method: 'POST', body: JSON.stringify(input) }).catch(async () => {
+    const fii = await staticFii(ticker);
+    const assumptions = { annualDividendYield: roundMoney(fii.dividendYield12m ?? 8), annualAppreciation: roundMoney(fii.annualAppreciation ?? 2) };
+    return { ...simulateLocally({ ...input, ...assumptions }), assumptions };
+  }),
   simulatePortfolio: async (input: { initialAmount: number; monthlyContribution: number; years: number; tickers: string[]; weights?: number[]; annualDividendYield: number; annualAppreciation: number; reinvestDividends?: boolean }) => request<SimulationResult>('/simulation/portfolio', { method: 'POST', body: JSON.stringify(input) }).catch(() => {
     const result = simulateLocally({ initialAmount: input.initialAmount, monthlyContribution: input.monthlyContribution, years: input.years, annualDividendYield: input.annualDividendYield, annualAppreciation: input.annualAppreciation, reinvestDividends: input.reinvestDividends ?? true });
     return { ...result, assumptions: { annualDividendYield: input.annualDividendYield, annualAppreciation: input.annualAppreciation } };
   }),
-  allocate: async (amount: number, count: 3 | 5 | 10, tickers?: string[]) => request<Allocation[]>('/contributions', { method: 'POST', body: JSON.stringify({ amount, count, tickers }) }).catch(() => (tickers ?? []).slice(0, count).map((ticker) => ({ ticker, score: 0, amount: roundMoney(amount / Math.min(count, tickers?.length || 1)), percentage: roundMoney(100 / Math.min(count, tickers?.length || 1)) }))),
-  analyzePortfolio: async (tickers: string[]) => request<Fii[]>('/portfolio/analyze', { method: 'POST', body: JSON.stringify({ tickers }) }).catch(async () => {
-    const selected = new Set(tickers);
-    return (await publicCatalog()).filter((item) => selected.has(item.ticker));
+  allocate: async (amount: number, count: 3 | 5 | 10, tickers?: string[]) => request<Allocation[]>('/contributions', { method: 'POST', body: JSON.stringify({ amount, count, tickers }) }).catch(async () => {
+    const selected = (await analyzeStatically(tickers ?? [])).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, count);
+    const totalScore = selected.reduce((sum, item) => sum + Math.max(item.score ?? 0, 1), 0);
+    return selected.map((item) => {
+      const percentage = Math.min(40, Math.max(item.score ?? 0, 1) / Math.max(totalScore, 1) * 100);
+      return { ticker: item.ticker, score: item.score ?? 0, amount: roundMoney(amount * percentage / 100), percentage: roundMoney(percentage) };
+    });
   }),
+  analyzePortfolio: async (tickers: string[]) => request<Fii[]>('/portfolio/analyze', { method: 'POST', body: JSON.stringify({ tickers }) }).catch(() => analyzeStatically(tickers)),
 };

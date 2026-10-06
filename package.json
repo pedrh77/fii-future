@@ -4,6 +4,7 @@
   "workspaces": ["frontend", "server"],
   "scripts": {
     "dev": "concurrently -n API,WEB -c green,cyan \"npm run dev -w server\" \"npm run dev -w frontend\"",
+    "snapshot": "node scripts/build-market-snapshot.mjs",
     "build": "npm run build -w server && npm run build -w frontend",
     "test": "npm run test -w server"
   },
